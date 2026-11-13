@@ -162,13 +162,3 @@ def test_admin_can_approve_a_ticket(admin_env):
     assert tickets.get_store().list()[0]["status"] == "approved"
     assert tickets.get_store().list()[0]["reviewed_by"] == "admin"
     assert ticket["id"] in at.dataframe[0].value["id"].tolist()
-
-
-def test_demo_login_hint_only_for_admin_admin(monkeypatch):
-    monkeypatch.setenv("ADMIN_USERNAME", "admin")
-    monkeypatch.setenv("ADMIN_PASSWORD", "admin")
-    at = AppTest.from_file(ADMIN_PAGE, default_timeout=30).run()
-    assert any("Demo login" in i.value for i in at.info)
-    monkeypatch.setenv("ADMIN_PASSWORD", "correct-horse")
-    at = AppTest.from_file(ADMIN_PAGE, default_timeout=30).run()
-    assert not any("Demo login" in i.value for i in at.info)

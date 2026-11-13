@@ -12,7 +12,7 @@
 ![Azure](https://img.shields.io/badge/Deploy-Azure%20Container%20Apps-0078D4)
 ![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)
 
-**🚀 Live demo: [deepeval-agent-refund.streamlit.app](https://deepeval-agent-refund-foprzjhki6yshzt8rrovqj.streamlit.app/)**: sign in with Clerk, bring your own free Groq key, and chat with the agent. The evaluation results page needs no sign-in. To review the tickets, open **Admin: refund tickets** and sign in with the demo login `admin` / `admin` (tickets are stored in Neon Postgres and shared by every visitor).
+**🚀 Live demo: [deepeval-agent-refund.streamlit.app](https://deepeval-agent-refund-foprzjhki6yshzt8rrovqj.streamlit.app/)**: sign in with Clerk, bring your own free Groq key, and chat with the agent. The evaluation results page needs no sign-in.
 
 > **Credit:** this project builds on **[LangChain Agent Evaluation System](https://github.com/Mohamad-Hachem/LangChain_Agent_Evaluation_System) by [Mohamad Hachem](https://github.com/Mohamad-Hachem)**, who designed the refund agent, its tools and sample data, the evaluation dataset, the seven-metric DeepEval runner, and the `understanding_metrics/` examples. The original commits are kept in this repository's history. The extensions listed below are by [Arash Omranpour](https://github.com/Arashomranpour).
 
@@ -276,7 +276,7 @@ The app has three pages:
 
 - **Chat with the agent**: talk to the refund agent as one of the demo customers. Replies **stream** token by token, and a live status panel shows each tool call with its arguments and output as it happens. Each session is limited to 20 messages. The sidebar shows the store date and the demo customers' purchases.
 - **Evaluation results**: reads the runs saved in `evaluations/results/` and shows the average score per metric against its threshold, a pass/fail grid of every test case and metric, the judge's reason for each score, scores over time once there are several runs, and Markdown/JSON downloads. It never calls a model and needs no key.
-- **Admin: refund tickets**: sign in with the admin username and password to see every ticket the agent issued, filter and search them, and approve or reject open ones with a note. Locally, set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`. When both are `admin`, the page shows that demo login to visitors, as on the public demo. On Azure, Terraform generates the password into Key Vault; get it with `terraform output admin_sign_in`.
+- **Admin: refund tickets**: sign in with the admin username and password to see every ticket the agent issued, filter and search them, and approve or reject open ones with a note. Locally, set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`. On Azure, Terraform generates the password into Key Vault; get it with `terraform output admin_sign_in`.
 
 The chat page is **bring-your-own-key**: visitors paste their own Groq key ([console.groq.com/keys](https://console.groq.com/keys)). It is checked by listing models (no tokens spent), kept only in that browser session, and never saved. `GROQ_API_KEY` in `.env` is used only by the command-line scripts, so a deployed app never runs on your key.
 

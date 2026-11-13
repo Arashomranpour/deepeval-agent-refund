@@ -21,14 +21,6 @@ def admin_configured() -> bool:
     return bool(os.getenv("ADMIN_USERNAME")) and bool(os.getenv("ADMIN_PASSWORD"))
 
 
-DEMO_CREDENTIALS = ("admin", "admin")
-
-
-def is_demo_login() -> bool:
-    """True when the public demo uses the shared admin/admin login (never on Azure)."""
-    return (os.getenv("ADMIN_USERNAME"), os.getenv("ADMIN_PASSWORD")) == DEMO_CREDENTIALS
-
-
 def check_credentials(username: str, password: str) -> bool:
     """Constant-time comparison of both fields; False when no admin is configured."""
     expected_user = os.getenv("ADMIN_USERNAME", "")
