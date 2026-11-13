@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 import streamlit as st
 
-from admin_auth import LoginGuard, admin_configured
+from admin_auth import LoginGuard, admin_configured, is_demo_login
 from glass import hero
 from tickets import STATUSES, get_store
 
@@ -34,6 +34,9 @@ if not st.session_state.get("admin_user"):
         locked = guard.seconds_locked()
         if locked:
             st.error(f"Too many failed attempts. Try again in {locked} seconds.")
+        if is_demo_login():
+            st.info("**Demo login:** username `admin`, password `admin`. "
+                    "Tickets are shared by every visitor of this demo.")
         with st.form("admin_login", clear_on_submit=True):
             st.subheader("🔐 Admin sign-in")
             username = st.text_input("Username", autocomplete="username")
