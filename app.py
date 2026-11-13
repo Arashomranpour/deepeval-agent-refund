@@ -24,5 +24,6 @@ apply_glass_theme()
 pages = st.navigation([
     st.Page("app_pages/chat_page.py", title="Chat with the agent", icon="💬", default=True),
     st.Page("app_pages/results_page.py", title="Evaluation results", icon="📊"),
+    st.Page("app_pages/admin_page.py", title="Admin: refund tickets", icon="🔐"),
 ])
 pages.run()

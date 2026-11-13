@@ -51,3 +51,9 @@ variable "monthly_budget" {
   type        = number
   default     = 10
 }
+
+variable "admin_username" {
+  description = "Username for the app's admin (refund tickets) page. The password is generated and stored in Key Vault."
+  type        = string
+  default     = "admin"
+}

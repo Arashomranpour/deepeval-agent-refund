@@ -24,3 +24,6 @@ terraform/backend.hcl
 .coverage
 coverage.md
 htmlcov/
+
+# Local ticket database (SQLite fallback when Azure Table Storage is not configured)
+data/*.db

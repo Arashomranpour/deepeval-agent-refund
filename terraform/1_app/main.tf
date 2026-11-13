@@ -29,6 +29,8 @@ provider "azurerm" {
     }
   }
   subscription_id = var.subscription_id != "" ? var.subscription_id : null
+  # The tickets storage account has shared keys disabled: use Entra ID for data-plane calls.
+  storage_use_azuread = true
 }
 
 data "azurerm_client_config" "current" {}
@@ -107,15 +109,63 @@ resource "azurerm_role_assignment" "app_kv_reader" {
   principal_id         = azurerm_user_assigned_identity.app.principal_id
 }
 
+# --- Refund tickets: Azure Table Storage, Entra ID only (no account keys) ----------
+resource "azurerm_storage_account" "data" {
+  name                            = "${substr(replace(local.name_prefix, "-", ""), 0, 14)}data${random_string.suffix.result}"
+  resource_group_name             = azurerm_resource_group.main.name
+  location                        = azurerm_resource_group.main.location
+  account_tier                    = "Standard"
+  account_replication_type        = "LRS"
+  min_tls_version                 = "TLS1_2"
+  allow_nested_items_to_be_public = false
+  shared_access_key_enabled       = false
+  default_to_oauth_authentication = true
+  tags                            = local.common_tags
+}
+
+# The app reads/writes tickets with its managed identity (it creates the table on first use).
+resource "azurerm_role_assignment" "app_tables" {
+  scope                = azurerm_storage_account.data.id
+  role_definition_name = "Storage Table Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.app.principal_id
+}
+
+# You can browse the tickets in the portal's Storage browser too.
+resource "azurerm_role_assignment" "owner_tables" {
+  scope                = azurerm_storage_account.data.id
+  role_definition_name = "Storage Table Data Reader"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
 # Azure RBAC takes a short while to propagate before the first secret write/read.
 resource "time_sleep" "rbac_propagation" {
-  depends_on      = [azurerm_role_assignment.kv_admin, azurerm_role_assignment.app_kv_reader]
+  depends_on = [
+    azurerm_role_assignment.kv_admin,
+    azurerm_role_assignment.app_kv_reader,
+    azurerm_role_assignment.app_tables,
+  ]
   create_duration = "60s"
 }
 
 resource "azurerm_key_vault_secret" "appinsights" {
   name         = "appinsights-connection-string"
   value        = azurerm_application_insights.main.connection_string
+  key_vault_id = azurerm_key_vault.main.id
+  depends_on   = [time_sleep.rbac_propagation]
+}
+
+# --- Admin sign-in for the tickets page: password generated here, kept in Key Vault ---
+resource "random_password" "admin" {
+  length      = 24
+  special     = true
+  min_special = 2
+  # Characters that are safe to paste in a browser field and a shell.
+  override_special = "-_.!@#"
+}
+
+resource "azurerm_key_vault_secret" "admin_password" {
+  name         = "admin-password"
+  value        = random_password.admin.result
   key_vault_id = azurerm_key_vault.main.id
   depends_on   = [time_sleep.rbac_propagation]
 }
@@ -209,6 +259,12 @@ resource "azurerm_container_app" "app" {
     key_vault_secret_id = azurerm_key_vault_secret.appinsights.versionless_id
   }
 
+  secret {
+    name                = "admin-password"
+    identity            = azurerm_user_assigned_identity.app.id
+    key_vault_secret_id = azurerm_key_vault_secret.admin_password.versionless_id
+  }
+
   ingress {
     external_enabled = true
     target_port      = local.port
@@ -246,6 +302,28 @@ resource "azurerm_container_app" "app" {
       env {
         name  = "OTEL_SERVICE_NAME"
         value = "${local.name_prefix}-app"
+      }
+
+      # Refund tickets in Table Storage, reached with the managed identity below.
+      env {
+        name  = "AZURE_TABLES_ENDPOINT"
+        value = azurerm_storage_account.data.primary_table_endpoint
+      }
+
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.app.client_id
+      }
+
+      # Admin sign-in for the tickets page.
+      env {
+        name  = "ADMIN_USERNAME"
+        value = var.admin_username
+      }
+
+      env {
+        name        = "ADMIN_PASSWORD"
+        secret_name = "admin-password"
       }
 
       dynamic "liveness_probe" {

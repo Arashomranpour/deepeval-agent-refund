@@ -8,3 +8,4 @@ store_today       = "2026-10-16"
 enable_front_door = false        # true = Azure Front Door CDN in front (~$35/month base)
 budget_alert_email = ""          # your e-mail = monthly budget alerts; empty = no budget
 monthly_budget     = 10
+admin_username     = "admin"

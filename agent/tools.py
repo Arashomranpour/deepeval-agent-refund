@@ -6,6 +6,7 @@ from langchain.tools import tool
 
 from data import users_data
 from objects import PurchaseItem
+from tickets import get_store
 
 load_dotenv()
 
@@ -44,16 +45,26 @@ def calculate_right_refund(user:str, items:list[PurchaseItem])-> str:
                 total_refund += users_data[user][item.name]["price"]
 
         return (f"Quoted refund amount: {total_refund}. No ticket has been issued yet; "
-                f"call issue_refund_ticket(user={user!r}, refund_amount={total_refund}) to refund.")
+                f"call issue_refund_ticket(user={user!r}, refund_amount={total_refund}, "
+                f"items={[item.name for item in items]!r}) to refund.")
 
     return {"status": "there was no username found"}
 
 @tool
-def issue_refund_ticket(user:str, refund_amount: int) -> str:
-    """this tool will send a ticket to the right team to return the refund"""
+def issue_refund_ticket(user: str, refund_amount: float, items: list[str] | None = None) -> str:
+    """Issue the refund: open a refund ticket for the support team and return its ticket ID.
+    Pass the quoted amount from calculate_right_refund and the names of the refunded items."""
 
     logging.info(f"using issue_refund_ticket for user: {user}")
-    return f"a refund ticket has been issued successfully with the amount of {refund_amount}"
+    if not users_data.get(user):
+        return "No ticket issued: there was no username found."
+    try:
+        ticket = get_store().create(user=user, amount=refund_amount, items=items)
+    except Exception:
+        logging.exception("could not save the refund ticket")
+        return "No ticket issued: the ticket system is unavailable. Tell the customer to try again later."
+    return (f"Refund ticket {ticket['id']} issued successfully for {refund_amount}. "
+            "Give the customer this ticket ID.")
 
 @tool
 def get_today_date() -> str:

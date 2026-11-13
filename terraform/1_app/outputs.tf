@@ -68,3 +68,16 @@ output "key_vault_name" {
 output "application_insights_name" {
   value = azurerm_application_insights.main.name
 }
+
+output "tickets_storage_account" {
+  value = azurerm_storage_account.data.name
+}
+
+output "admin_sign_in" {
+  description = "How to get the admin page credentials (the password itself is never printed)."
+  value       = <<-EOT
+    Admin page: https://${azurerm_container_app.app.ingress[0].fqdn}  ->  "Admin: refund tickets"
+    Username:   ${var.admin_username}
+    Password:   az keyvault secret show --vault-name ${azurerm_key_vault.main.name} --name admin-password --query value -o tsv
+  EOT
+}

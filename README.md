@@ -14,6 +14,10 @@
 
 > **Credit:** this project builds on **[LangChain Agent Evaluation System](https://github.com/Mohamad-Hachem/LangChain_Agent_Evaluation_System) by [Mohamad Hachem](https://github.com/Mohamad-Hachem)**, who designed the refund agent, its tools and sample data, the evaluation dataset, the seven-metric DeepEval runner, and the `understanding_metrics/` examples. The original commits are kept in this repository's history. The extensions listed below are by [Arash Omranpour](https://github.com/Arashomranpour).
 
+![Chat page: the agent checks the purchase and issues refund ticket RF-20261113-C8A890. Admin page: the same ticket, approved by the admin](screenshots/chat-and-admin.png)
+
+*Left: the agent issues a refund and returns a ticket ID. Right: the admin signs in and approves that ticket.*
+
 ## What this version adds
 
 | Area | Original project | Added in this version |
@@ -22,12 +26,13 @@
 | **Free-tier engineering** | n/a | Runs on Groq's free tier (8k tokens/min): [`slim_trace.py`](evaluations/slim_trace.py) cuts judge traces from ~10k to ~1.3k tokens, plus low reasoning effort, output caps, sequential judging with retries, `EVAL_LIMIT`, and a longer DeepEval timeout |
 | **Reliability fixes** | Clock-dependent dates; structured output | **Fixed store date** so expected answers stay true over time; plain final answer instead of structured output (Groq rejected forced tool calls) |
 | **Agent bug found by evals** | n/a | Tool Correctness exposed that the agent *said* a refund was issued without calling `issue_refund_ticket`. Fixed with an explicit prompt procedure and a clearer tool result: 0.75 → 1.00 ([ADR 0009](docs/adr/0009-evaluate-behaviour-not-just-answers.md)) |
+| **Refund tickets** | A string saying "ticket issued" | Real tickets (`RF-…` IDs) saved to **Azure Table Storage** through the app's managed identity (SQLite locally), plus an **Admin page** with its own username and password to review, approve or reject them ([ADR 0010](docs/adr/0010-refund-tickets-in-table-storage.md)) |
 | **Results** | Printed in the terminal | Every run **saved** to [`evaluations/results/`](evaluations/results/): JSON per run, a CSV history, and a Markdown summary |
 | **App** | Basic chat demo | **Streamlit app** with a glass UI: a **streaming** chat page that shows tool calls live, a bring-your-own-key gate, a 20-message limit per session, and an **Evaluation results** page with charts, a pass/fail grid, the judge's reasons, and trends across runs |
 | **Code quality** | n/a | Offline pytest suite (no key, no network) with coverage, **ruff** lint, and **pre-commit** hooks (ruff, `terraform fmt`, a Groq-key leak check) |
 | **Observability** | n/a | OpenTelemetry → **Application Insights**: one span per chat turn (outcome, tools used, latency) with anonymous session IDs, never the key or message text |
 | **Packaging** | n/a | Dockerfile (uv, non-root, health check) |
-| **Infrastructure** | n/a | **Terraform for Azure** ([`terraform/`](terraform/)): remote state in Azure Storage (Entra ID auth only), Container Registry, Container Apps (scale to zero), **Key Vault** read by a managed identity, Log Analytics + Application Insights, a **budget alert**, optional Front Door CDN, and GitHub OIDC with least privilege |
+| **Infrastructure** | n/a | **Terraform for Azure** ([`terraform/`](terraform/)): remote state in Azure Storage (Entra ID auth only), Container Registry, Container Apps (scale to zero), **Key Vault** and **Table Storage** reached by a managed identity, Log Analytics + Application Insights, a **budget alert**, optional Front Door CDN, and GitHub OIDC with least privilege |
 | **CI/CD** | n/a | GitHub Actions: CI (ruff, tests + coverage summary, Terraform fmt/validate, Docker build), **Terraform plan as a PR comment**, Deploy to Azure (OIDC, skipped until configured), and a manual Eval workflow that commits new results |
 | **Docs** | n/a | [Architecture decision records](docs/adr/) for each significant choice |
 
@@ -78,9 +83,9 @@ The agent handles refund requests against the sample purchase records in [`agent
 | `get_user_purchase_history` | Look up a customer's purchases by username |
 | `get_today_date` | Read the current date for eligibility checks |
 | `calculate_right_refund` | Add the prices of the requested items |
-| `issue_refund_ticket` | Return a simulated ticket confirmation for the refund amount |
+| `issue_refund_ticket` | Save a refund ticket (customer, items, amount) and return its ticket ID |
 
-The tools use in-memory sample data. Issuing a ticket returns a string; it does not contact a payment provider or create an external ticket. Eligibility checks are directed by the prompt rather than enforced inside the refund tools.
+The purchase data is in-memory sample data. Issuing a ticket saves it to the ticket store ([`agent/tickets.py`](agent/tickets.py)): Azure Table Storage when deployed, a local SQLite file (`data/tickets.db`) otherwise, and memory during tests and evaluation runs. No payment provider is contacted. Eligibility checks are directed by the prompt rather than enforced inside the refund tools.
 
 [`agent/agent.py`](agent/agent.py) builds the agent with `build_agent(llm)` and an `InMemorySaver` checkpointer. The agent's last message is its answer (`final_answer(response)`). Structured output is not used: on Groq it needs a forced tool call that `gpt-oss` sometimes skips, which fails the request. Evaluation cases each receive a new thread ID to keep their conversation histories separate.
 
@@ -264,10 +269,11 @@ LLM judgments and agent responses can vary between runs. Keep the model choices,
 uv run streamlit run app.py
 ```
 
-The app has two pages:
+The app has three pages:
 
 - **Chat with the agent**: talk to the refund agent as one of the demo customers. Replies **stream** token by token, and a live status panel shows each tool call with its arguments and output as it happens. Each session is limited to 20 messages. The sidebar shows the store date and the demo customers' purchases.
 - **Evaluation results**: reads the runs saved in `evaluations/results/` and shows the average score per metric against its threshold, a pass/fail grid of every test case and metric, the judge's reason for each score, scores over time once there are several runs, and Markdown/JSON downloads. It never calls a model and needs no key.
+- **Admin: refund tickets**: sign in with the admin username and password to see every ticket the agent issued, filter and search them, and approve or reject open ones with a note. Locally, set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`. On Azure, Terraform generates the password into Key Vault; get it with `terraform output admin_sign_in`.
 
 The chat page is **bring-your-own-key**: visitors paste their own Groq key ([console.groq.com/keys](https://console.groq.com/keys)). It is checked by listing models (no tokens spent), kept only in that browser session, and never saved. `GROQ_API_KEY` in `.env` is used only by the command-line scripts, so a deployed app never runs on your key. To deploy on Streamlit Community Cloud, point it at `app.py`; no secrets are needed.
 
@@ -303,7 +309,9 @@ Useful additions to the dataset include purchases exactly 30 days old, future pu
 | [`docs/adr/`](docs/adr/) | Architecture decision records |
 | [`terraform/`](terraform/), [`Dockerfile`](Dockerfile), [`.github/workflows/`](.github/workflows/) | Azure infrastructure, container, CI/CD |
 | [`agent/agent.py`](agent/agent.py) | `build_agent(llm)`, `final_answer()`, and a terminal chat (`uv run python agent/agent.py`) |
-| [`agent/tools.py`](agent/tools.py) | Purchase lookup, fixed store date, refund calculation, and simulated ticket tools |
+| [`agent/tools.py`](agent/tools.py) | Purchase lookup, fixed store date, refund calculation, and ticket issuing tools |
+| [`agent/tickets.py`](agent/tickets.py) | Ticket store: Azure Table Storage, SQLite, or in-memory |
+| [`app_pages/admin_page.py`](app_pages/admin_page.py), [`app_pages/admin_auth.py`](app_pages/admin_auth.py) | Admin sign-in and ticket review page |
 | [`agent/data.py`](agent/data.py) | Sample purchases for ten customers |
 | [`agent/prompts.py`](agent/prompts.py) | Refund policy and conversation instructions |
 | [`agent/objects.py`](agent/objects.py) | `PurchaseItem` Pydantic schema |
@@ -346,7 +354,9 @@ flowchart LR
     GH -- "PR: terraform plan" --> State["Storage account<br/>Terraform state"]
     GH --> CA["Container Apps<br/>Streamlit · scale to zero"]
     ACR -- "AcrPull (managed identity)" --> CA
-    KV["Key Vault"] -- "secret (managed identity)" --> CA
+    KV["Key Vault"] -- "secrets (managed identity)" --> CA
+    CA -- "tickets (managed identity)" --> Tables["Table Storage<br/>refund tickets"]
+    Admin["Admin"] -- "username + password" --> CA
     User["Visitor"] --> FD["Front Door (optional CDN)"] --> CA
     User -. "or directly" .-> CA
     CA -- "OpenTelemetry" --> AI["Application Insights<br/>+ Log Analytics"]
@@ -357,7 +367,7 @@ flowchart LR
 | Module | Creates |
 |---|---|
 | [`terraform/0_state`](terraform/0_state/) | Storage account for remote state (Entra ID auth only, versioning, soft delete); writes `terraform/backend.hcl` |
-| [`terraform/1_app`](terraform/1_app/) | Resource group, Log Analytics, Application Insights, Key Vault (RBAC), Container Registry, managed identity, Container Apps environment and app, budget alert, optional Front Door |
+| [`terraform/1_app`](terraform/1_app/) | Resource group, Log Analytics, Application Insights, Key Vault (RBAC) with a generated admin password, Table Storage for tickets (no keys), Container Registry, managed identity, Container Apps environment and app, budget alert, optional Front Door |
 | [`terraform/2_cicd`](terraform/2_cicd/) | GitHub OIDC identities: a **deployer** (main branch only) and a read-only **planner** (pull requests) |
 
 ```bash

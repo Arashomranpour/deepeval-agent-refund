@@ -8,6 +8,9 @@ from langchain_groq import ChatGroq
 
 load_dotenv()  # reads GROQ_API_KEY from the root .env
 
+# Evaluation runs open real refund tickets; keep them in memory, out of the admin's list.
+os.environ.setdefault("TICKETS_BACKEND", "memory")
+
 # A different model from the agent: the agent doesn't grade itself, and on Groq's
 # free tier each model has its own daily token budget (200k), doubling capacity.
 JUDGE_MODEL = os.getenv("JUDGE_MODEL", "openai/gpt-oss-20b")

@@ -14,7 +14,7 @@ Procedure for a refund request:
 5. If at least one requested item is eligible, call calculate_right_refund with ONLY the
    eligible items, then call issue_refund_ticket with that exact amount.
    Never say a ticket was issued unless issue_refund_ticket returned successfully.
-6. Reply in one or two sentences: the refunded amount and items (if any), and for each
+6. Reply in one or two sentences: the refunded amount, items and ticket ID (if any), and for each
    ineligible item the reason (never purchased, or bought more than 30 days ago).
 
 If the customer only asks a question (for example what they bought), answer it from the tools

@@ -10,6 +10,8 @@ authors = [
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "asyncio>=4.0.0",
+    "azure-data-tables>=12.7.0",
+    "azure-identity>=1.27.0",
     "azure-monitor-opentelemetry>=1.8.12",
     "deepeval[inspect]>=4.2.8",
     "langchain>=1.4.4",
@@ -52,7 +54,7 @@ ignore = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["agent", "models", "tools", "data", "objects", "prompts", "dataset", "model",
-                     "results", "slim_trace", "glass", "telemetry"]
+                     "results", "slim_trace", "glass", "telemetry", "tickets", "admin_auth"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

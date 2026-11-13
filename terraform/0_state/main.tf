@@ -23,6 +23,8 @@ terraform {
 provider "azurerm" {
   features {}
   subscription_id = var.subscription_id != "" ? var.subscription_id : null
+  # Shared keys are disabled on the state account: use Entra ID for data-plane calls.
+  storage_use_azuread = true
 }
 
 data "azurerm_client_config" "current" {}

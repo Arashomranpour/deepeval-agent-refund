@@ -13,3 +13,4 @@ Short records of the decisions that shaped this project: the context, what we ch
 | [0007](0007-oidc-and-least-privilege.md) | OIDC and least-privilege identities for CI/CD | Accepted |
 | [0008](0008-secrets-in-key-vault-via-managed-identity.md) | App secrets in Key Vault, read by managed identity | Accepted |
 | [0009](0009-evaluate-behaviour-not-just-answers.md) | Gate quality on behavior metrics, not answer text | Accepted |
+| [0010](0010-refund-tickets-in-table-storage.md) | Refund tickets in Azure Table Storage, reviewed on an admin page | Accepted |
