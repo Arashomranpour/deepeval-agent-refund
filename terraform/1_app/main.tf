@@ -151,8 +151,9 @@ resource "azurerm_container_app" "app" {
   }
 
   lifecycle {
-    # CI deploys new images with `az containerapp update`; don't roll them back.
-    ignore_changes = [template[0].container[0].image]
+    # CI deploys new images (and switches the port from the placeholder's 80 to
+    # Streamlit's 8501) with the Azure CLI; don't roll those back on the next apply.
+    ignore_changes = [template[0].container[0].image, ingress[0].target_port]
   }
 
   depends_on = [azurerm_role_assignment.app_acr_pull]

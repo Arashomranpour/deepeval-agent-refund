@@ -334,7 +334,7 @@ The app runs as a container on **Azure Container Apps**. Streamlit keeps a live 
 ```mermaid
 flowchart LR
     Dev["git push main"] --> GH["GitHub Actions"]
-    GH -- "OIDC (no secrets)" --> ACR["Azure Container Registry<br/>az acr build"]
+    GH -- "OIDC (no secrets)" --> ACR["Azure Container Registry<br/>docker build + push"]
     GH --> CA["Azure Container Apps<br/>Streamlit · scale to zero"]
     ACR --> CA
     User["Visitor"] --> FD["Azure Front Door (optional CDN)"] --> CA
@@ -345,10 +345,10 @@ flowchart LR
 
 ```bash
 az login
-cd terraform/1_app
-cp terraform.tfvars.example terraform.tfvars      # pick an allowed region
+bash scripts/azure_bootstrap.sh                   # providers, allowed regions, tfvars
+cd terraform/1_app                                # set `location` in terraform.tfvars first
 terraform init && terraform plan -out=tfplan && terraform apply tfplan
-terraform output setup_instructions               # az acr build ... and next steps
+terraform output setup_instructions               # next steps with real names filled in
 
 cd ../2_cicd                                      # optional: deploy from GitHub
 cp terraform.tfvars.example terraform.tfvars
@@ -359,7 +359,7 @@ terraform output setup_instructions               # gh variable set ... commands
 | Workflow | Trigger | What it does |
 |---|---|---|
 | [CI](.github/workflows/ci.yml) | Every push and PR | Offline tests, byte-compile, `terraform fmt` + `validate`, Docker build |
-| [Deploy to Azure](.github/workflows/deploy.yml) | Push to `main` (app paths), manual | `az acr build` then `az containerapp update` then health check. **Skipped until `AZURE_CLIENT_ID` is set** |
+| [Deploy to Azure](.github/workflows/deploy.yml) | Push to `main` (app paths), manual | Tests, then Docker build and push to ACR, then `az containerapp update`, then health check. **Skipped until `AZURE_CLIENT_ID` is set** |
 | [Run DeepEval evaluation](.github/workflows/eval.yml) | Manual | Runs `eval_all.py` with the `GROQ_API_KEY` secret, writes a job summary, and commits results (which redeploys the results page) |
 
 Rough cost: Container Apps scale to zero, so close to $0 when idle, plus about $5/month for the Basic registry. Front Door Standard adds about $35/month, so it is off by default. To tear down: `terraform destroy` in `2_cicd`, then in `1_app`.

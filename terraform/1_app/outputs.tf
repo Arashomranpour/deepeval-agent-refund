@@ -36,18 +36,19 @@ output "setup_instructions" {
     App URL:        https://${azurerm_container_app.app.ingress[0].fqdn}
     ${var.enable_front_door ? "Front Door URL: https://${azurerm_cdn_frontdoor_endpoint.main[0].host_name}" : "Front Door:     disabled (set enable_front_door = true)"}
 
-    1. Build the image in Azure (no local Docker needed), from the repo root:
-       az acr build --registry ${azurerm_container_registry.main.name} --image deepeval-agent-refund:v1 .
+    The app now serves a placeholder page. To ship the real image:
 
-    2. Point the app at it, either:
-       - set container_image = "${azurerm_container_registry.main.login_server}/deepeval-agent-refund:v1"
-         in terraform.tfvars, then: terraform plan -out=tfplan && terraform apply tfplan
-       - or let CI deploy it (terraform/2_cicd), which runs `az containerapp update` on every push.
+    Option A (recommended): GitHub Actions
+       cd ../2_cicd, apply it, run the gh variable set commands it prints, then:
+       gh workflow run deploy.yml --repo <owner>/deepeval-agent-refund && gh run watch
 
-    3. GitHub repository variables for CI (gh variable set NAME --body VALUE):
-       AZURE_RESOURCE_GROUP = ${azurerm_resource_group.main.name}
-       AZURE_ACR_NAME       = ${azurerm_container_registry.main.name}
-       AZURE_CONTAINER_APP  = ${azurerm_container_app.app.name}
+    Option B: from this machine (needs Docker Desktop running), repo root:
+       az acr login --name ${azurerm_container_registry.main.name}
+       docker build -t ${azurerm_container_registry.main.login_server}/deepeval-agent-refund:v1 .
+       docker push ${azurerm_container_registry.main.login_server}/deepeval-agent-refund:v1
+       az containerapp ingress update -n ${azurerm_container_app.app.name} -g ${azurerm_resource_group.main.name} --target-port 8501
+       az containerapp update -n ${azurerm_container_app.app.name} -g ${azurerm_resource_group.main.name} \
+         --image ${azurerm_container_registry.main.login_server}/deepeval-agent-refund:v1
 
   EOT
 }

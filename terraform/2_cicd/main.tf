@@ -62,16 +62,18 @@ resource "azuread_application_federated_identity_credential" "main_branch" {
 }
 
 # --- Least privilege: push images to this registry, update this one app ---------------
+# Images are built with Docker on the GitHub runner and pushed (ACR Tasks / `az acr build`
+# is often disabled on Azure for Students), so pushing is all the registry needs.
 resource "azurerm_role_assignment" "acr_push" {
   scope                = local.acr_id
   role_definition_name = "AcrPush"
   principal_id         = azuread_service_principal.github.object_id
 }
 
-# `az acr build` queues a cloud build, which needs to run tasks on the registry.
-resource "azurerm_role_assignment" "acr_tasks" {
+# `az acr show` / `az acr login` read the registry resource itself (read-only).
+resource "azurerm_role_assignment" "acr_read" {
   scope                = local.acr_id
-  role_definition_name = "Contributor"
+  role_definition_name = "Reader"
   principal_id         = azuread_service_principal.github.object_id
 }
 
