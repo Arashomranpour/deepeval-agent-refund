@@ -7,15 +7,15 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[1] / "agent")
 )
 
+from deepeval import evaluate
+from deepeval.integrations.langchain import CallbackHandler
+from deepeval.metrics import GEval
+from deepeval.test_case import LLMTestCase, SingleTurnParams, ToolCall
+from dotenv import load_dotenv
+
 from agent import agent, final_answer
 from dataset import dataset
 from model import eval_model
-
-from deepeval.metrics import GEval
-from deepeval.integrations.langchain import CallbackHandler
-from deepeval.test_case import LLMTestCase, ToolCall, SingleTurnParams
-from deepeval import evaluate
-from dotenv import load_dotenv
 
 load_dotenv()
 

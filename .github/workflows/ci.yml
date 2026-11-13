@@ -20,17 +20,19 @@ jobs:
           enable-cache: true
       - name: Install dependencies
         run: uv sync --locked
-      - name: Byte-compile all sources
-        run: uv run python -m compileall -q agent evaluations app_pages app.py understanding_metrics
-      - name: Run tests (no API key, no network)
-        run: uv run pytest -q
+      - name: Lint (ruff)
+        run: uv run ruff check . --output-format=github
+      - name: Run tests with coverage (no API key, no network)
+        run: |
+          uv run pytest -q --cov --cov-report=term --cov-report=markdown:coverage.md
+          { echo "### Test coverage"; cat coverage.md; } >> "$GITHUB_STEP_SUMMARY"
 
   terraform:
     name: Terraform validate
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        module: [1_app, 2_cicd]
+        module: [0_state, 1_app, 2_cicd]
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3

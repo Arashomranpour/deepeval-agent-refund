@@ -1,8 +1,8 @@
-from langchain.agents import create_agent
-from deepeval.integrations.langchain import CallbackHandler
 from deepeval.dataset import EvaluationDataset, Golden
+from deepeval.integrations.langchain import CallbackHandler
 from deepeval.metrics import PlanQualityMetric
 from dotenv import load_dotenv
+from langchain.agents import create_agent
 
 load_dotenv()
 
@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluations"))
 from model import eval_model  # Groq-backed DeepEval judge
+
 
 def multiply(a: int, b: int) -> int:
     """Multiply two numbers."""

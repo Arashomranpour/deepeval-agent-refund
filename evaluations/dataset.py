@@ -1,6 +1,6 @@
-from deepeval.dataset import EvaluationDataset, Golden
 import os
 
+from deepeval.dataset import EvaluationDataset, Golden
 from deepeval.test_case import ToolCall
 
 ALL_GOLDENS = [
@@ -16,7 +16,7 @@ ALL_GOLDENS = [
                          input_parameters={"user":"user123","items":[{"name":"book"},{"name":"pen"}]}),
                 ToolCall(name="issue_refund_ticket",
                          input_parameters={"user":"user123", "refund_amount": 30}),
-                
+
             ]
         ),
         Golden(
@@ -31,7 +31,7 @@ ALL_GOLDENS = [
                          input_parameters={"user":"user123","items":[{"name":"book"}]}),
                 ToolCall(name="issue_refund_ticket",
                          input_parameters={"user":"user123", "refund_amount": 23}),
-                
+
             ]
         ),
         Golden(

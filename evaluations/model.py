@@ -1,12 +1,16 @@
 """DeepEval judge model backed by Groq (via langchain-groq) instead of OpenAI."""
 
-from dotenv import load_dotenv
+import os
+
 from deepeval.models import DeepEvalBaseLLM
+from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 
 load_dotenv()  # reads GROQ_API_KEY from the root .env
 
-JUDGE_MODEL = "openai/gpt-oss-120b"
+# A different model from the agent: the agent doesn't grade itself, and on Groq's
+# free tier each model has its own daily token budget (200k), doubling capacity.
+JUDGE_MODEL = os.getenv("JUDGE_MODEL", "openai/gpt-oss-20b")
 
 
 class GroqJudge(DeepEvalBaseLLM):

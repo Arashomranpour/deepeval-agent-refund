@@ -14,9 +14,8 @@ from slim_trace import install as install_slim_trace
 
 install_slim_trace()  # keep judge requests under Groq's free-tier limit
 
-from deepeval.metrics import PlanQualityMetric
 from deepeval.integrations.langchain import CallbackHandler
-
+from deepeval.metrics import PlanQualityMetric
 
 metrics = [PlanQualityMetric(threshold=0.8,model=eval_model,include_reason=True)]
 

@@ -27,3 +27,13 @@ variable "container_app_id" {
   type        = string
   default     = ""
 }
+
+variable "tfstate_resource_group" {
+  description = "Resource group of the Terraform state storage account (output of 0_state)"
+  type        = string
+}
+
+variable "tfstate_storage_account" {
+  description = "Terraform state storage account name (output of 0_state)"
+  type        = string
+}

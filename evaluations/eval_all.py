@@ -26,13 +26,13 @@ from deepeval.test_case import LLMTestCase, SingleTurnParams, ToolCall, ToolCall
 if __package__:
     from .dataset import dataset
     from .model import eval_model
-    from .slim_trace import install as install_slim_trace
     from .results import read_latest_deepeval_run, save_run
+    from .slim_trace import install as install_slim_trace
 else:
     from dataset import dataset
     from model import eval_model
-    from slim_trace import install as install_slim_trace
     from results import read_latest_deepeval_run, save_run
+    from slim_trace import install as install_slim_trace
 
 
 SUCCESSFUL_TASK_DESCRIPTION = """
@@ -73,7 +73,7 @@ def build_metrics():
             include_reason=True,
         ),
         ToolCorrectnessMetric(
-            threshold=0.9, 
+            threshold=0.9,
             model=eval_model,
             include_reason=True,
             evaluation_params=[ToolCallParams.INPUT_PARAMETERS]

@@ -16,3 +16,11 @@ __pycache__
 tfplan
 *.tfplan
 crash.log
+
+# Per-account Terraform backend config (written by terraform/0_state)
+terraform/backend.hcl
+
+# Coverage
+.coverage
+coverage.md
+htmlcov/

@@ -10,13 +10,24 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
+    }
   }
 
-  # Local backend: state is stored in terraform.tfstate in this directory (gitignored).
+  # Remote state in Azure Storage (created by 0_state). Partial config:
+  #   terraform init -backend-config=../backend.hcl -backend-config="key=1_app.tfstate"
+  backend "azurerm" {}
 }
 
 provider "azurerm" {
-  features {}
+  features {
+    key_vault {
+      # Demo project: let `terraform destroy` fully remove the vault.
+      purge_soft_delete_on_destroy = true
+    }
+  }
   subscription_id = var.subscription_id != "" ? var.subscription_id : null
 }
 
@@ -58,6 +69,87 @@ resource "azurerm_log_analytics_workspace" "main" {
   retention_in_days   = 30
   daily_quota_gb      = 0.5 # cost guard for a demo
   tags                = local.common_tags
+}
+
+# --- Telemetry: Application Insights on the same workspace -------------------------
+resource "azurerm_application_insights" "main" {
+  name                = "${local.name_prefix}-insights"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  workspace_id        = azurerm_log_analytics_workspace.main.id
+  application_type    = "web"
+  tags                = local.common_tags
+}
+
+# --- Secrets: Key Vault (RBAC), read by the app's managed identity -----------------
+resource "azurerm_key_vault" "main" {
+  name                       = "${substr(replace(local.name_prefix, "-", ""), 0, 14)}kv${random_string.suffix.result}"
+  location                   = azurerm_resource_group.main.location
+  resource_group_name        = azurerm_resource_group.main.name
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  sku_name                   = "standard"
+  rbac_authorization_enabled = true
+  soft_delete_retention_days = 7
+  purge_protection_enabled   = false
+  tags                       = local.common_tags
+}
+
+# Whoever runs Terraform can write secrets; the app can only read them.
+resource "azurerm_role_assignment" "kv_admin" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+resource "azurerm_role_assignment" "app_kv_reader" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.app.principal_id
+}
+
+# Azure RBAC takes a short while to propagate before the first secret write/read.
+resource "time_sleep" "rbac_propagation" {
+  depends_on      = [azurerm_role_assignment.kv_admin, azurerm_role_assignment.app_kv_reader]
+  create_duration = "60s"
+}
+
+resource "azurerm_key_vault_secret" "appinsights" {
+  name         = "appinsights-connection-string"
+  value        = azurerm_application_insights.main.connection_string
+  key_vault_id = azurerm_key_vault.main.id
+  depends_on   = [time_sleep.rbac_propagation]
+}
+
+# --- Cost guardrail: monthly budget with e-mail alerts ------------------------------
+resource "azurerm_consumption_budget_resource_group" "main" {
+  count             = var.budget_alert_email != "" ? 1 : 0
+  name              = "${local.name_prefix}-monthly-budget"
+  resource_group_id = azurerm_resource_group.main.id
+  amount            = var.monthly_budget
+  time_grain        = "Monthly"
+
+  time_period {
+    start_date = formatdate("YYYY-MM-01'T'00:00:00Z", plantimestamp())
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 50
+    operator       = "GreaterThan"
+    threshold_type = "Forecasted"
+    contact_emails = [var.budget_alert_email]
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 90
+    operator       = "GreaterThan"
+    contact_emails = [var.budget_alert_email]
+  }
+
+  lifecycle {
+    ignore_changes = [time_period] # start date is fixed at creation
+  }
 }
 
 # --- Container registry (images are pushed by CI or `az acr build`) ---------------
@@ -110,6 +202,13 @@ resource "azurerm_container_app" "app" {
     identity = azurerm_user_assigned_identity.app.id
   }
 
+  # Pulled from Key Vault at runtime by the app's identity; never stored in the app config.
+  secret {
+    name                = "appinsights-connection-string"
+    identity            = azurerm_user_assigned_identity.app.id
+    key_vault_secret_id = azurerm_key_vault_secret.appinsights.versionless_id
+  }
+
   ingress {
     external_enabled = true
     target_port      = local.port
@@ -139,6 +238,16 @@ resource "azurerm_container_app" "app" {
         value = var.store_today
       }
 
+      env {
+        name        = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        secret_name = "appinsights-connection-string"
+      }
+
+      env {
+        name  = "OTEL_SERVICE_NAME"
+        value = "${local.name_prefix}-app"
+      }
+
       dynamic "liveness_probe" {
         for_each = var.container_image != "" ? [1] : []
         content {
@@ -156,7 +265,7 @@ resource "azurerm_container_app" "app" {
     ignore_changes = [template[0].container[0].image, ingress[0].target_port]
   }
 
-  depends_on = [azurerm_role_assignment.app_acr_pull]
+  depends_on = [azurerm_role_assignment.app_acr_pull, time_sleep.rbac_propagation]
 }
 
 # --- Optional: Azure Front Door (CDN + global edge + managed TLS) -----------------

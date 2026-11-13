@@ -13,7 +13,7 @@ variable "project_name" {
 variable "location" {
   description = "Azure region. Azure for Students only allows some regions; check the 'Allowed locations' policy."
   type        = string
-  default     = "westeurope"
+  default     = "germanywestcentral"
 }
 
 variable "container_image" {
@@ -38,4 +38,16 @@ variable "enable_front_door" {
   description = "Put Azure Front Door (CDN, edge TLS) in front of the app. Has a fixed monthly base fee."
   type        = bool
   default     = false
+}
+
+variable "budget_alert_email" {
+  description = "E-mail for monthly budget alerts (50% forecast, 90% actual). Empty = no budget."
+  type        = string
+  default     = ""
+}
+
+variable "monthly_budget" {
+  description = "Monthly budget for the resource group, in the billing currency"
+  type        = number
+  default     = 10
 }

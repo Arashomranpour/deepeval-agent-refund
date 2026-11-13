@@ -1,5 +1,4 @@
 
-from langchain.agents import create_agent
 from deepeval import evaluate
 from deepeval.dataset import EvaluationDataset, Golden
 from deepeval.metrics import ToolCorrectnessMetric
@@ -9,6 +8,7 @@ from deepeval.test_case import (
     ToolCallParams,
 )
 from dotenv import load_dotenv
+from langchain.agents import create_agent
 
 load_dotenv()
 
@@ -16,7 +16,6 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluations"))
-from model import eval_model  # Groq-backed DeepEval judge
 
 
 # Step 1: Define tool

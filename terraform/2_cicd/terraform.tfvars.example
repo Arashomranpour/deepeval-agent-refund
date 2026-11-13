@@ -2,3 +2,5 @@
 subscription_id   = ""
 project_name      = "deepeval-refund"
 github_repository = "Arashomranpour/deepeval-agent-refund"
+tfstate_resource_group  = "" # from 0_state: terraform output -raw state_resource_group
+tfstate_storage_account = "" # from 0_state: terraform output -raw state_storage_account

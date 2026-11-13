@@ -70,3 +70,15 @@ def test_summarize_counts_errors_separately():
             {"metric": "A", "score": None, "status": "error"}]
     [s] = results.summarize(rows)
     assert (s["average_score"], s["passed"], s["failed"], s["errors"], s["total"]) == (0.5, 1, 1, 1, 3)
+
+
+def test_message_limit_disables_chat():
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30)
+    at.session_state["agent"] = object()  # past the key gate, no real model
+    at.session_state["thread_id"] = "t"
+    at.session_state["history"] = []
+    at.session_state["sent"] = 20
+    at.run()
+    assert not at.exception
+    assert at.chat_input[0].disabled
+    assert any("used its 20 messages" in i.value for i in at.info)

@@ -1,11 +1,11 @@
 
-from langchain.agents import create_agent
 from deepeval import evaluate
 from deepeval.dataset import EvaluationDataset, Golden
+from deepeval.evaluate import CacheConfig
 from deepeval.metrics import GEval
 from deepeval.test_case import LLMTestCase, SingleTurnParams
-from deepeval.evaluate import CacheConfig
 from dotenv import load_dotenv
+from langchain.agents import create_agent
 
 # Step 1: Load environment variables
 load_dotenv()

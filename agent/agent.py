@@ -8,8 +8,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from models import make_llm
 from prompts import agent_system_prompt
-from tools import calculate_right_refund, get_today_date
-from tools import get_user_purchase_history, issue_refund_ticket
+from tools import calculate_right_refund, get_today_date, get_user_purchase_history, issue_refund_ticket
 
 load_dotenv()
 
@@ -30,6 +29,31 @@ def build_agent(llm: BaseChatModel):
 def final_answer(response: dict) -> str:
     """The text of the agent's last message."""
     return response["messages"][-1].content
+
+
+def stream_reply(agent, text: str, config: dict):
+    """Run one turn and yield events as they happen:
+    ("tool_call", {"id", "name", "args"}), ("tool_result", {"id", "output"}),
+    ("token", str) for answer text, and ("reset", None) when text that preceded a tool
+    call should be discarded (the real answer comes after the tools)."""
+    for mode, data in agent.stream(
+        {"messages": [HumanMessage(content=text)]},
+        config=config,
+        stream_mode=["messages", "updates"],
+    ):
+        if mode == "messages":
+            chunk, meta = data
+            if meta.get("langgraph_node") == "model" and isinstance(chunk.content, str) and chunk.content:
+                yield "token", chunk.content
+        elif mode == "updates":
+            for node, update in data.items():
+                for msg in (update or {}).get("messages", []):
+                    if node == "model" and getattr(msg, "tool_calls", None):
+                        yield "reset", None
+                        for call in msg.tool_calls:
+                            yield "tool_call", {"id": call["id"], "name": call["name"], "args": call["args"]}
+                    elif node == "tools":
+                        yield "tool_result", {"id": msg.tool_call_id, "output": msg.content}
 
 
 _default_agent = None

@@ -20,6 +20,21 @@ HISTORY_FILE = RESULTS_DIR / "history.csv"
 HISTORY_FIELDS = ["run_id", "timestamp", "metric", "average_score", "passed", "failed", "errors", "total"]
 
 
+def safe_error(error: str) -> str:
+    """Short, public-safe error text. Raw provider errors include the account's
+    organization ID, and these results are committed and shown on a public page."""
+    text = error.lower()
+    if "tokens per day" in text or "(tpd)" in text:
+        return "Rate limited: the Groq key's daily token budget is used up. Rerun later."
+    if "429" in text or "rate limit" in text:
+        return "Rate limited by Groq (tokens per minute). Rerun later."
+    if "413" in text or "too large" in text:
+        return "Request too large for the Groq free tier."
+    if "timeout" in text:
+        return "Timed out waiting for the judge model."
+    return f"Judge call failed ({error.split(':', 1)[0][:60]})."
+
+
 def read_latest_deepeval_run(metric_type: str) -> list[dict]:
     """Rows from the run DeepEval just finished (it rewrites this snapshot every run)."""
     path = Path(LATEST_FULL_TEST_RUN_FILE_PATH)
@@ -39,7 +54,7 @@ def read_latest_deepeval_run(metric_type: str) -> list[dict]:
                 "score": metric.get("score"),
                 "threshold": metric.get("threshold"),
                 "status": "error" if error else ("pass" if success else "fail"),
-                "reason": error or metric.get("reason"),
+                "reason": safe_error(error) if error else metric.get("reason"),
                 "actual_output": case.get("actualOutput"),
                 "expected_output": case.get("expectedOutput"),
             })

@@ -1,0 +1,70 @@
+name: Terraform plan
+
+# On pull requests that touch infrastructure: show exactly what would change in Azure.
+on:
+  pull_request:
+    paths:
+      - "terraform/1_app/**"
+      - ".github/workflows/terraform-plan.yml"
+
+permissions:
+  id-token: write # OIDC login as the read-only planner identity
+  contents: read
+  pull-requests: write # post the plan as a PR comment
+
+jobs:
+  plan:
+    # Skips until terraform/2_cicd is applied; fork PRs never get Azure tokens.
+    if: vars.AZURE_PLANNER_CLIENT_ID != '' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/1_app
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_PLANNER_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_budget_alert_email: ${{ vars.BUDGET_ALERT_EMAIL }}
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: terraform init (remote state, Entra ID auth)
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=1_app.tfstate" \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="use_oidc=true"
+
+      - name: terraform plan
+        id: plan
+        run: |
+          terraform plan -input=false -lock-timeout=2m -no-color -out=tfplan | tee plan.txt
+          echo "summary=$(grep -E '^(Plan:|No changes)' plan.txt | head -1)" >> "$GITHUB_OUTPUT"
+
+      - name: Comment the plan on the PR
+        uses: actions/github-script@v7
+        env:
+          SUMMARY: ${{ steps.plan.outputs.summary }}
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('terraform/1_app/plan.txt', 'utf8');
+            const body = [
+              `### Terraform plan: \`terraform/1_app\``,
+              `**${process.env.SUMMARY || 'see details'}**`,
+              '<details><summary>Full plan</summary>', '',
+              '```hcl', plan.slice(-60000), '```', '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, body,
+            });

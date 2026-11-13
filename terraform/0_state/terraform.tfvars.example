@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored). Apply this module first.
+subscription_id = ""
+project_name    = "deepeval-refund"
+location        = "germanywestcentral"

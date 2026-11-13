@@ -52,3 +52,19 @@ output "setup_instructions" {
 
   EOT
 }
+
+output "resource_group_id" {
+  value = azurerm_resource_group.main.id
+}
+
+output "key_vault_id" {
+  value = azurerm_key_vault.main.id
+}
+
+output "key_vault_name" {
+  value = azurerm_key_vault.main.name
+}
+
+output "application_insights_name" {
+  value = azurerm_application_insights.main.name
+}

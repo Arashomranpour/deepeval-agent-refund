@@ -1,8 +1,10 @@
-from langchain.tools import tool
-from data import users_data
-from dotenv import load_dotenv
 import logging
 import os
+
+from dotenv import load_dotenv
+from langchain.tools import tool
+
+from data import users_data
 from objects import PurchaseItem
 
 load_dotenv()
@@ -28,8 +30,8 @@ def get_user_purchase_history(user: str) -> dict:
 
 @tool
 def calculate_right_refund(user:str, items:list[PurchaseItem])-> str:
-    """this tool takes a list of the items to be returned and the username and
-    will return how much the refund is worth"""
+    """Quote how much a refund for these items is worth. This does NOT issue anything:
+    call issue_refund_ticket with the quoted amount to actually refund the customer."""
 
     logging.info(f"using calculate_right_refund tool to get user's: {user} refund")
 
@@ -41,7 +43,8 @@ def calculate_right_refund(user:str, items:list[PurchaseItem])-> str:
             if users_data[user].get(item.name):
                 total_refund += users_data[user][item.name]["price"]
 
-        return f"the value of the refund is: {total_refund}"
+        return (f"Quoted refund amount: {total_refund}. No ticket has been issued yet; "
+                f"call issue_refund_ticket(user={user!r}, refund_amount={total_refund}) to refund.")
 
     return {"status": "there was no username found"}
 
@@ -57,7 +60,7 @@ def get_today_date() -> str:
     """Return today's date in YYYY-MM-DD format
     This tool takes no arguments
     only use if a user exist and an item is present for refund"""
-    logging.info(f"using the date tool")
+    logging.info("using the date tool")
     return STORE_TODAY
 
 # print(get_user_purchase_history.invoke("user123"))

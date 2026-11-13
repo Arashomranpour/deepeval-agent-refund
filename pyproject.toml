@@ -10,6 +10,7 @@ authors = [
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "asyncio>=4.0.0",
+    "azure-monitor-opentelemetry>=1.8.12",
     "deepeval[inspect]>=4.2.8",
     "langchain>=1.4.4",
     "langchain-groq>=1.1.3",
@@ -22,10 +23,41 @@ dependencies = [
 langchain-agent-evaluation-system = "langchain_agent_evaluation_system:main"
 
 [build-system]
-requires = ["uv_build>=0.12.22,<0.13.0"]
+requires = ["uv_build>=0.12.22,<0.14.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.7.0",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.5",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["python=3.12", "python=3.212"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# The agent/eval scripts import sibling modules after sys.path setup.
+ignore = ["E402"]
+
+[tool.ruff.lint.per-file-ignores]
+# CSS and natural-language test data read better unwrapped.
+"app_pages/glass.py" = ["E501"]
+"evaluations/dataset.py" = ["E501"]
+"evaluations/task_completion.py" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent", "models", "tools", "data", "objects", "prompts", "dataset", "model",
+                     "results", "slim_trace", "glass", "telemetry"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["agent", "evaluations", "app_pages"]
+omit = ["evaluations/eval_all.py", "evaluations/*_correctness.py", "evaluations/plan_*.py",
+        "evaluations/step_efficiency.py", "evaluations/task_completion.py"]

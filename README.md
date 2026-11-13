@@ -18,15 +18,18 @@
 
 | Area | Original project | Added in this version |
 |---|---|---|
-| **LLM provider** | OpenAI (`langchain-openai`) | **Groq** via `langchain-groq` (`openai/gpt-oss-120b`), for both the agent and the judge: a custom `DeepEvalBaseLLM` wrapper ([`evaluations/model.py`](evaluations/model.py)) |
+| **LLM provider** | OpenAI (`langchain-openai`) | **Groq** via `langchain-groq`: agent `openai/gpt-oss-120b`, judge `openai/gpt-oss-20b` (a different model, so the agent never grades itself) through a custom `DeepEvalBaseLLM` wrapper ([`evaluations/model.py`](evaluations/model.py)) |
 | **Free-tier engineering** | n/a | Runs on Groq's free tier (8k tokens/min): [`slim_trace.py`](evaluations/slim_trace.py) cuts judge traces from ~10k to ~1.3k tokens, plus low reasoning effort, output caps, sequential judging with retries, `EVAL_LIMIT`, and a longer DeepEval timeout |
 | **Reliability fixes** | Clock-dependent dates; structured output | **Fixed store date** so expected answers stay true over time; plain final answer instead of structured output (Groq rejected forced tool calls) |
+| **Agent bug found by evals** | n/a | Tool Correctness exposed that the agent *said* a refund was issued without calling `issue_refund_ticket`. Fixed with an explicit prompt procedure and a clearer tool result: 0.75 → 1.00 ([ADR 0009](docs/adr/0009-evaluate-behaviour-not-just-answers.md)) |
 | **Results** | Printed in the terminal | Every run **saved** to [`evaluations/results/`](evaluations/results/): JSON per run, a CSV history, and a Markdown summary |
-| **App** | Basic chat demo | **Streamlit app** with a glass UI: a chat page showing every tool call, a bring-your-own-key gate, and an **Evaluation results** page with charts, a pass/fail grid, the judge's reasons, and trends across runs |
-| **Testing** | n/a | Offline pytest suite for the app (no key, no network) |
+| **App** | Basic chat demo | **Streamlit app** with a glass UI: a **streaming** chat page that shows tool calls live, a bring-your-own-key gate, a 20-message limit per session, and an **Evaluation results** page with charts, a pass/fail grid, the judge's reasons, and trends across runs |
+| **Code quality** | n/a | Offline pytest suite (no key, no network) with coverage, **ruff** lint, and **pre-commit** hooks (ruff, `terraform fmt`, a Groq-key leak check) |
+| **Observability** | n/a | OpenTelemetry → **Application Insights**: one span per chat turn (outcome, tools used, latency) with anonymous session IDs, never the key or message text |
 | **Packaging** | n/a | Dockerfile (uv, non-root, health check) |
-| **Infrastructure** | n/a | **Terraform for Azure**: Container Registry, Container Apps (scale to zero), Log Analytics, optional Front Door CDN, and GitHub OIDC with least privilege ([`terraform/`](terraform/)) |
-| **CI/CD** | n/a | GitHub Actions: CI (tests, Terraform validate, Docker build), Deploy to Azure (OIDC, skipped until configured), and a manual Eval workflow that commits new results |
+| **Infrastructure** | n/a | **Terraform for Azure** ([`terraform/`](terraform/)): remote state in Azure Storage (Entra ID auth only), Container Registry, Container Apps (scale to zero), **Key Vault** read by a managed identity, Log Analytics + Application Insights, a **budget alert**, optional Front Door CDN, and GitHub OIDC with least privilege |
+| **CI/CD** | n/a | GitHub Actions: CI (ruff, tests + coverage summary, Terraform fmt/validate, Docker build), **Terraform plan as a PR comment**, Deploy to Azure (OIDC, skipped until configured), and a manual Eval workflow that commits new results |
+| **Docs** | n/a | [Architecture decision records](docs/adr/) for each significant choice |
 
 A correct final answer is only one part of a successful agent run. Did the agent identify the customer, check refund eligibility, select the right tools, and refund only the requested items?
 
@@ -121,14 +124,14 @@ GROQ_API_KEY=your_groq_api_key_here
 
 The `.env` file is ignored by Git. Keep your real key there.
 
-Models are served by Groq through `langchain-groq`. The refund agent and its DeepEval judge both use `openai/gpt-oss-120b`:
+Models are served by Groq through `langchain-groq`. The refund agent uses `openai/gpt-oss-120b`; the DeepEval judge uses `openai/gpt-oss-20b` (override with `JUDGE_MODEL`), which also gives the judge its own daily token budget:
 
 | Role | Configuration |
 |---|---|
 | Refund agent | [`agent/models.py`](agent/models.py) |
 | DeepEval judge | [`evaluations/model.py`](evaluations/model.py) |
 
-The judge is a small `DeepEvalBaseLLM` wrapper around `ChatGroq` (structured outputs use JSON-schema mode). To switch models, change `AGENT_MODEL` / `JUDGE_MODEL`; the standalone examples in `understanding_metrics/` use `groq:openai/gpt-oss-120b` and the same judge. Groq's free tier allows ~8k tokens per minute (and per request), so the project is tuned to stay small:
+The judge is a small `DeepEvalBaseLLM` wrapper around `ChatGroq` (structured outputs use JSON-schema mode). To switch models, change `AGENT_MODEL` or set `JUDGE_MODEL`; the standalone examples in `understanding_metrics/` use `groq:openai/gpt-oss-120b` and the same judge. Groq's free tier allows ~8k tokens per minute (and per request), so the project is tuned to stay small:
 
 - **Short outputs**: both models use `reasoning_effort="low"` and `max_tokens=1024`, and the agent is told to answer in one or two sentences.
 - **Fewer goldens**: only the first 2 goldens run by default. Set `EVAL_LIMIT=7` (or `EVAL_LIMIT=0` for all) to run more.
@@ -207,7 +210,7 @@ These thresholds are defined in `build_metrics()` in [`evaluations/eval_all.py`]
 | Step efficiency | `StepEfficiencyMetric` | Whether the agent took unnecessary or redundant steps | Execution trace | 0.80 |
 | Plan quality | `PlanQualityMetric` | Whether the agent's plan is suitable for the task | Execution trace | 0.80 |
 | Plan adherence | `PlanAdherenceMetric` | Whether execution follows the agent's plan | Execution trace | 0.80 |
-| Argument correctness | `ArgumentCorrectnessMetric` | Whether tool inputs are appropriate for the request | User input + actual tool calls and arguments | 0.90 |
+| Argument correctness | `ArgumentCorrectnessMetric` | Whether tool inputs are appropriate for the request | User input + actual tool calls and arguments | 0.80 |
 | Tool correctness | `ToolCorrectnessMetric` | Whether the agent called the expected tools | Actual tool calls + expected tools | 0.90 |
 | Answer correctness | `GEval` | Whether the answer reaches the expected logical conclusion | Input + actual answer + expected answer | 0.80 |
 
@@ -247,7 +250,7 @@ The screenshots below are from an earlier OpenAI-based run over eight cases. You
 
 ![DeepEval aggregate scores for argument correctness, tool correctness, and answer correctness](screenshots/Screenshot%202026-10-15%20180821.png)
 
-Average score and pass rate answer different questions. Argument correctness averages 0.62, but only two cases meet its 0.90 threshold. High step efficiency also does not establish that the agent made a good plan: inspect the plan quality failures and their traces together.
+Average score and pass rate answer different questions. Argument correctness averages 0.62, but only two cases met the 0.90 threshold used in that run. High step efficiency also does not establish that the agent made a good plan: inspect the plan quality failures and their traces together.
 
 ![An unknown-customer case that passes tool and answer correctness but fails argument correctness](screenshots/Screenshot%202026-10-15%20180840.png)
 
@@ -263,15 +266,17 @@ uv run streamlit run app.py
 
 The app has two pages:
 
-- **Chat with the agent**: talk to the refund agent as one of the demo customers. Each reply has a *tool calls* panel showing which tools the agent used, with their arguments and outputs. The sidebar shows the store date and the demo customers' purchases.
+- **Chat with the agent**: talk to the refund agent as one of the demo customers. Replies **stream** token by token, and a live status panel shows each tool call with its arguments and output as it happens. Each session is limited to 20 messages. The sidebar shows the store date and the demo customers' purchases.
 - **Evaluation results**: reads the runs saved in `evaluations/results/` and shows the average score per metric against its threshold, a pass/fail grid of every test case and metric, the judge's reason for each score, scores over time once there are several runs, and Markdown/JSON downloads. It never calls a model and needs no key.
 
 The chat page is **bring-your-own-key**: visitors paste their own Groq key ([console.groq.com/keys](https://console.groq.com/keys)). It is checked by listing models (no tokens spent), kept only in that browser session, and never saved. `GROQ_API_KEY` in `.env` is used only by the command-line scripts, so a deployed app never runs on your key. To deploy on Streamlit Community Cloud, point it at `app.py`; no secrets are needed.
 
-Offline tests for the app (no key, no network):
+Offline tests, lint and hooks (no key, no network):
 
 ```bash
-uv run pytest
+uv run pytest --cov          # app, tools, streaming, trace slimming, results
+uv run ruff check .
+uv run pre-commit install    # ruff, terraform fmt, Groq-key leak check on every commit
 ```
 
 ## Explore and extend
@@ -293,7 +298,10 @@ Useful additions to the dataset include purchases exactly 30 days old, future pu
 | Path | Purpose |
 |---|---|
 | [`app.py`](app.py), [`app_pages/`](app_pages/) | Streamlit app: chat page and evaluation results page |
-| [`tests/test_app.py`](tests/test_app.py) | Offline tests for the app's key gate and results page |
+| [`tests/`](tests/) | Offline tests: key gate, message limit, results page, tools, streaming, trace slimming |
+| [`app_pages/telemetry.py`](app_pages/telemetry.py) | Optional OpenTelemetry → Application Insights |
+| [`docs/adr/`](docs/adr/) | Architecture decision records |
+| [`terraform/`](terraform/), [`Dockerfile`](Dockerfile), [`.github/workflows/`](.github/workflows/) | Azure infrastructure, container, CI/CD |
 | [`agent/agent.py`](agent/agent.py) | `build_agent(llm)`, `final_answer()`, and a terminal chat (`uv run python agent/agent.py`) |
 | [`agent/tools.py`](agent/tools.py) | Purchase lookup, fixed store date, refund calculation, and simulated ticket tools |
 | [`agent/data.py`](agent/data.py) | Sample purchases for ten customers |
@@ -329,43 +337,61 @@ Start with the documented Python script commands. The package entry point declar
 
 ## Deploy to Azure
 
-The app runs as a container on **Azure Container Apps**. Streamlit keeps a live WebSocket connection per browser, so it needs a server; a static CDN alone can't host it. **Azure Front Door** can optionally sit in front as the CDN and edge TLS layer.
+The app runs as a container on **Azure Container Apps**. Streamlit keeps a live WebSocket connection per browser, so it needs a server; a static CDN alone can't host it ([ADR 0001](docs/adr/0001-container-apps-not-static-cdn.md)). **Azure Front Door** can optionally sit in front as the CDN and edge TLS layer.
 
 ```mermaid
 flowchart LR
-    Dev["git push main"] --> GH["GitHub Actions"]
-    GH -- "OIDC (no secrets)" --> ACR["Azure Container Registry<br/>docker build + push"]
-    GH --> CA["Azure Container Apps<br/>Streamlit · scale to zero"]
-    ACR --> CA
-    User["Visitor"] --> FD["Azure Front Door (optional CDN)"] --> CA
+    Dev["git push / PR"] --> GH["GitHub Actions"]
+    GH -- "OIDC (no secrets)" --> ACR["Container Registry<br/>docker build + push"]
+    GH -- "PR: terraform plan" --> State["Storage account<br/>Terraform state"]
+    GH --> CA["Container Apps<br/>Streamlit · scale to zero"]
+    ACR -- "AcrPull (managed identity)" --> CA
+    KV["Key Vault"] -- "secret (managed identity)" --> CA
+    User["Visitor"] --> FD["Front Door (optional CDN)"] --> CA
     User -. "or directly" .-> CA
-    CA --> Logs["Log Analytics"]
+    CA -- "OpenTelemetry" --> AI["Application Insights<br/>+ Log Analytics"]
     CA -- "visitor's own key" --> Groq["Groq API"]
+    Budget["Budget alert"] -. "email at 50% / 90%" .-> Owner["Owner"]
 ```
+
+| Module | Creates |
+|---|---|
+| [`terraform/0_state`](terraform/0_state/) | Storage account for remote state (Entra ID auth only, versioning, soft delete); writes `terraform/backend.hcl` |
+| [`terraform/1_app`](terraform/1_app/) | Resource group, Log Analytics, Application Insights, Key Vault (RBAC), Container Registry, managed identity, Container Apps environment and app, budget alert, optional Front Door |
+| [`terraform/2_cicd`](terraform/2_cicd/) | GitHub OIDC identities: a **deployer** (main branch only) and a read-only **planner** (pull requests) |
 
 ```bash
 az login
 bash scripts/azure_bootstrap.sh                   # providers, allowed regions, tfvars
-cd terraform/1_app                                # set `location` in terraform.tfvars first
-terraform init && terraform plan -out=tfplan && terraform apply tfplan
-terraform output setup_instructions               # next steps with real names filled in
 
-cd ../2_cicd                                      # optional: deploy from GitHub
-cp terraform.tfvars.example terraform.tfvars
+cd terraform/0_state                              # 1. remote state
 terraform init && terraform plan -out=tfplan && terraform apply tfplan
+
+cd ../1_app                                       # 2. the app (default region: germanywestcentral)
+terraform init -backend-config=../backend.hcl -backend-config="key=1_app.tfstate"
+terraform plan -out=tfplan && terraform apply tfplan
+terraform output setup_instructions
+
+cd ../2_cicd                                      # 3. optional: deploy from GitHub
+# set tfstate_resource_group / tfstate_storage_account in terraform.tfvars (0_state outputs)
+terraform init -backend-config=../backend.hcl -backend-config="key=2_cicd.tfstate"
+terraform plan -out=tfplan && terraform apply tfplan
 terraform output setup_instructions               # gh variable set ... commands
 ```
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| [CI](.github/workflows/ci.yml) | Every push and PR | Offline tests, byte-compile, `terraform fmt` + `validate`, Docker build |
+| [CI](.github/workflows/ci.yml) | Every push and PR | ruff, tests with a coverage summary, `terraform fmt` + `validate` for all modules, Docker build |
+| [Terraform plan](.github/workflows/terraform-plan.yml) | PRs touching `terraform/1_app` | Read-only `terraform plan` posted as a PR comment. **Skipped until `AZURE_PLANNER_CLIENT_ID` is set** |
 | [Deploy to Azure](.github/workflows/deploy.yml) | Push to `main` (app paths), manual | Tests, then Docker build and push to ACR, then `az containerapp update`, then health check. **Skipped until `AZURE_CLIENT_ID` is set** |
 | [Run DeepEval evaluation](.github/workflows/eval.yml) | Manual | Runs `eval_all.py` with the `GROQ_API_KEY` secret, writes a job summary, and commits results (which redeploys the results page) |
 
-Rough cost: Container Apps scale to zero, so close to $0 when idle, plus about $5/month for the Basic registry. Front Door Standard adds about $35/month, so it is off by default. To tear down: `terraform destroy` in `2_cicd`, then in `1_app`.
+Security choices are recorded as ADRs: no client secrets ([0007](docs/adr/0007-oidc-and-least-privilege.md)), secrets in Key Vault ([0008](docs/adr/0008-secrets-in-key-vault-via-managed-identity.md)), and no LLM key in the deployment ([0006](docs/adr/0006-bring-your-own-key.md)).
+
+Rough cost: Container Apps scale to zero, so close to $0 when idle, plus about $5/month for the Basic registry. Log Analytics is capped at 0.5 GB/day, and the budget alert emails at 50% (forecast) and 90% (actual) of $10/month. Front Door Standard adds about $35/month, so it is off by default. To tear down: `terraform destroy` in `2_cicd`, then `1_app`, then `0_state`.
 
 ## Acknowledgements
 
 - **[Mohamad Hachem](https://github.com/Mohamad-Hachem)**: original [LangChain Agent Evaluation System](https://github.com/Mohamad-Hachem/LangChain_Agent_Evaluation_System): the refund agent, tools, data, evaluation dataset, seven-metric DeepEval runner, and metric examples.
-- **[Arash Omranpour](https://github.com/Arashomranpour)**: Groq migration, free-tier engineering, saved results, the Streamlit app, tests, Docker, Azure Terraform, and CI/CD (see [What this version adds](#what-this-version-adds)).
+- **[Arash Omranpour](https://github.com/Arashomranpour)**: Groq migration, free-tier engineering, the eval-driven agent fix, saved results, the Streamlit app, tests and linting, telemetry, Docker, Azure Terraform, CI/CD, and ADRs (see [What this version adds](#what-this-version-adds)).
 - Built with [LangChain](https://www.langchain.com/), [DeepEval](https://github.com/confident-ai/deepeval), [Groq](https://groq.com/), and [Streamlit](https://streamlit.io/).

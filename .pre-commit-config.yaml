@@ -1,0 +1,27 @@
+# Install once: uv run pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.5
+    hooks:
+      - id: ruff
+        args: [--fix]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+        exclude: ^evaluations/results/
+      - id: trailing-whitespace
+        exclude: ^evaluations/results/
+      - id: check-added-large-files
+      - id: detect-private-key
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.99.0
+    hooks:
+      - id: terraform_fmt
+  - repo: local
+    hooks:
+      - id: no-groq-keys
+        name: block Groq API keys
+        entry: "gsk_[A-Za-z0-9]{20,}"
+        language: pygrep

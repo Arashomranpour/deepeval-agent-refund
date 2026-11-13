@@ -17,7 +17,8 @@ echo "Subscription: $(az account show --query name -o tsv)"
 
 echo "== Registering resource providers (first time can take a few minutes)"
 for ns in Microsoft.App Microsoft.ContainerRegistry Microsoft.OperationalInsights \
-          Microsoft.ManagedIdentity Microsoft.Cdn; do
+          Microsoft.ManagedIdentity Microsoft.Cdn Microsoft.KeyVault Microsoft.Insights \
+          Microsoft.Storage Microsoft.Consumption; do
   state=$(az provider show -n "$ns" --query registrationState -o tsv)
   if [ "$state" != "Registered" ]; then
     az provider register -n "$ns" --wait --output none
@@ -32,11 +33,11 @@ az policy assignment list \
 echo
 
 echo "== terraform.tfvars"
-for module in 1_app 2_cicd; do
+for module in 0_state 1_app 2_cicd; do
   f="terraform/$module/terraform.tfvars"
   [ -f "$f" ] || cp "terraform/$module/terraform.tfvars.example" "$f"
   sed -i.bak "s|^subscription_id *=.*|subscription_id   = \"$SUB_ID\"|" "$f" && rm -f "$f.bak"
   echo "  $f: subscription_id set"
 done
-echo "Next: set 'location' in terraform/1_app/terraform.tfvars to an allowed region, then"
-echo "      cd terraform/1_app && terraform init && terraform plan -out=tfplan"
+echo "Next: set 'location' in the tfvars to an allowed region, then"
+echo "      cd terraform/0_state && terraform init && terraform plan -out=tfplan   # remote state"
