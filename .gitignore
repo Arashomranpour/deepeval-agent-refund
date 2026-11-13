@@ -31,3 +31,5 @@ data/*.db
 # Streamlit secrets (Community Cloud settings live in its dashboard)
 .streamlit/secrets.toml
 .streamlit/secrets.*.toml
+.neon
+node_modules/

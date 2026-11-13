@@ -15,3 +15,8 @@ terraform
 screenshots
 understanding_metrics
 tests
+node_modules
+.neon
+data/*.db
+.streamlit/secrets*.toml
+!.streamlit/secrets.toml.example
