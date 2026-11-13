@@ -2,3 +2,17 @@
 .venv
 __pycache__
 .deepeval
+.claude/
+.pytest_cache/
+.env.*
+!.env.example
+
+# Terraform: state, plans and real tfvars hold account details
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+tfplan
+*.tfplan
+crash.log

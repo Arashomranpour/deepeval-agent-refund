@@ -10,6 +10,12 @@ from dotenv import load_dotenv
 # Step 1: Load environment variables
 load_dotenv()
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluations"))
+from model import eval_model  # Groq-backed DeepEval judge
+
 
 # Step 2: Define tool
 def multiply(a: int, b: int) -> int:
@@ -19,7 +25,7 @@ def multiply(a: int, b: int) -> int:
 
 # Step 3: Create LangChain agent
 agent = create_agent(
-    model="openai:gpt-4",
+    model="groq:openai/gpt-oss-120b",
     tools=[multiply],
     system_prompt="Be concise. Use tools for any math questions.",
 )
@@ -89,7 +95,7 @@ metric = GEval(
         "numerical answer is correct.",
     ],
     threshold=0.8,
-    model="gpt-4o",
+    model=eval_model,
     verbose_mode=True,
 )
 

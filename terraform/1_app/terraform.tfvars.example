@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (gitignored) and adjust.
+subscription_id   = ""           # empty = the subscription `az account show` prints
+project_name      = "deepeval-refund"
+location          = "westeurope" # must be an allowed region for your subscription
+container_image   = ""           # set after the first `az acr build`
+min_replicas      = 0            # 0 = scale to zero (cheapest), 1 = always warm
+store_today       = "2026-10-16"
+enable_front_door = false        # true = Azure Front Door CDN in front (~$35/month base)

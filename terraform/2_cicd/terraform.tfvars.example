@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored). Apply after 1_app.
+subscription_id   = ""
+project_name      = "deepeval-refund"
+github_repository = "Arashomranpour/deepeval-agent-refund"

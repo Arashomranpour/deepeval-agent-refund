@@ -1,0 +1,70 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app.py"
+      - "app_pages/**"
+      - "agent/**"
+      - "evaluations/**"
+      - ".streamlit/**"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC login to Azure, no stored password
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Skips (not fails) until terraform/2_cicd is applied and its variables are set.
+    if: vars.AZURE_CLIENT_ID != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.url.outputs.app_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build image in Azure Container Registry
+        run: |
+          az acr build \
+            --registry "${{ vars.AZURE_ACR_NAME }}" \
+            --image "deepeval-agent-refund:${{ github.sha }}" \
+            --image "deepeval-agent-refund:latest" \
+            .
+
+      - name: Roll out new revision
+        run: |
+          LOGIN_SERVER=$(az acr show --name "${{ vars.AZURE_ACR_NAME }}" --query loginServer -o tsv)
+          az containerapp update \
+            --name "${{ vars.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "$LOGIN_SERVER/deepeval-agent-refund:${{ github.sha }}"
+
+      - name: Smoke test
+        id: url
+        run: |
+          FQDN=$(az containerapp show --name "${{ vars.AZURE_CONTAINER_APP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "app_url=https://$FQDN" >> "$GITHUB_OUTPUT"
+          # Scale-to-zero apps need a few seconds to wake up.
+          for i in $(seq 1 20); do
+            if curl -fsS "https://$FQDN/_stcore/health"; then echo; exit 0; fi
+            sleep 6
+          done
+          echo "Health check failed" && exit 1

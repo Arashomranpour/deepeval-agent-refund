@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.venv
+python=3.12
+python=3.212
+.git
+.github
+.claude
+.deepeval
+__pycache__
+*.pyc
+.pytest_cache
+terraform
+screenshots
+understanding_metrics
+tests

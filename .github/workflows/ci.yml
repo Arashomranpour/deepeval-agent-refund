@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Byte-compile all sources
+        run: uv run python -m compileall -q agent evaluations app_pages app.py understanding_metrics
+      - name: Run tests (no API key, no network)
+        run: uv run pytest -q
+
+  terraform:
+    name: Terraform validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [1_app, 2_cicd]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+        working-directory: terraform
+      - run: terraform init -backend=false -input=false
+        working-directory: terraform/${{ matrix.module }}
+      - run: terraform validate
+        working-directory: terraform/${{ matrix.module }}
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: deepeval-agent-refund:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

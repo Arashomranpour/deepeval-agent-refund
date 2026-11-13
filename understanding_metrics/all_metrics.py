@@ -23,6 +23,12 @@ from deepeval.test_case import (
 
 load_dotenv()
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluations"))
+from model import eval_model  # Groq-backed DeepEval judge
+
 
 # 1. Agent
 def multiply(a: int, b: int) -> int:
@@ -31,7 +37,7 @@ def multiply(a: int, b: int) -> int:
 
 
 agent = create_agent(
-    model="openai:gpt-4",
+    model="groq:openai/gpt-oss-120b",
     tools=[multiply],
     system_prompt="Be concise. Use tools for any math questions.",
 )
@@ -71,16 +77,16 @@ dataset = EvaluationDataset(
 # 3. Four trace-based metrics
 trace_metrics = [
     TaskCompletionMetric(
-        threshold=0.7, model="gpt-4o"
+        threshold=0.7, model=eval_model
     ),
     StepEfficiencyMetric(
-        threshold=0.7, model="gpt-4o"
+        threshold=0.7, model=eval_model
     ),
     PlanAdherenceMetric(
-        threshold=0.7, model="gpt-4o"
+        threshold=0.7, model=eval_model
     ),
     PlanQualityMetric(
-        threshold=0.7, model="gpt-4o"
+        threshold=0.7, model=eval_model
     ),
 ]
 
@@ -135,7 +141,7 @@ for golden in dataset.evals_iterator(metrics=trace_metrics):
 single_turn_metrics = [
     ArgumentCorrectnessMetric(
         threshold=0.8,
-        model="gpt-4o",
+        model=eval_model,
         include_reason=True,
     ),
 
@@ -162,7 +168,7 @@ single_turn_metrics = [
             "Give full credit only if the numerical values match.",
         ],
         threshold=0.8,
-        model="gpt-4o",
+        model=eval_model,
         include_reason=True,
     ),
 ]

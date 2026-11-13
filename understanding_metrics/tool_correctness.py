@@ -12,6 +12,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "evaluations"))
+from model import eval_model  # Groq-backed DeepEval judge
+
 
 # Step 1: Define tool
 def multiply(a: int, b: int) -> int:
@@ -21,7 +27,7 @@ def multiply(a: int, b: int) -> int:
 
 # Step 2: Create agent
 agent = create_agent(
-    model="openai:gpt-4",
+    model="groq:openai/gpt-oss-120b",
     tools=[multiply],
     system_prompt="Be concise. Use tools for any math questions.",
 )

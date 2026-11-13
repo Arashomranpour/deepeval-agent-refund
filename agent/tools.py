@@ -2,10 +2,15 @@ from langchain.tools import tool
 from data import users_data
 from dotenv import load_dotenv
 import logging
+import os
 from objects import PurchaseItem
-from datetime import date
 
 load_dotenv()
+
+# The demo purchase data in data.py has fixed dates, so "today" is frozen too.
+# Otherwise every purchase drifts past the 30-day window and the expected
+# answers in evaluations/dataset.py stop being true. Override with AGENT_TODAY.
+STORE_TODAY = os.getenv("AGENT_TODAY", "2026-10-16")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,7 +58,7 @@ def get_today_date() -> str:
     This tool takes no arguments
     only use if a user exist and an item is present for refund"""
     logging.info(f"using the date tool")
-    return date.today().isoformat()
+    return STORE_TODAY
 
 # print(get_user_purchase_history.invoke("user123"))
 #book = PurchaseItem(name="book")

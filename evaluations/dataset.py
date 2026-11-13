@@ -1,8 +1,9 @@
 from deepeval.dataset import EvaluationDataset, Golden
+import os
+
 from deepeval.test_case import ToolCall
 
-dataset = EvaluationDataset(
-    goldens=[
+ALL_GOLDENS = [
         Golden(
             input="I am user123, I would like a refund for the book and the pen",
             expected_output="A refund ticket for 30$ has been issued successfully",
@@ -82,6 +83,11 @@ dataset = EvaluationDataset(
                          input_parameters={"user":"user126"}),
             ]
         ),
-    ]
+]
 
+# Groq's free tier can't run 7 metrics x 7 goldens in one go. By default only the
+# first EVAL_LIMIT goldens are used (2); set EVAL_LIMIT=0 to run all of them.
+EVAL_LIMIT = int(os.getenv("EVAL_LIMIT", "2"))
+dataset = EvaluationDataset(
+    goldens=ALL_GOLDENS[:EVAL_LIMIT] if EVAL_LIMIT > 0 else ALL_GOLDENS
 )

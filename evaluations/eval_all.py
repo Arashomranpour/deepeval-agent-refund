@@ -1,11 +1,16 @@
+import os
 import sys
 from pathlib import Path
 from uuid import uuid4
 
 from dotenv import load_dotenv
 
+# On Groq's free tier, rate-limit retries can take minutes; DeepEval's default
+# 180 s budget per metric would cancel the whole run. Must be set before importing deepeval.
+os.environ.setdefault("DEEPEVAL_PER_TASK_TIMEOUT_SECONDS_OVERRIDE", "900")
+
 from deepeval import evaluate
-from deepeval.evaluate import CacheConfig, DisplayConfig
+from deepeval.evaluate import AsyncConfig, CacheConfig, DisplayConfig, ErrorConfig
 from deepeval.integrations.langchain import CallbackHandler
 from deepeval.metrics import (
     ArgumentCorrectnessMetric,
@@ -21,9 +26,13 @@ from deepeval.test_case import LLMTestCase, SingleTurnParams, ToolCall, ToolCall
 if __package__:
     from .dataset import dataset
     from .model import eval_model
+    from .slim_trace import install as install_slim_trace
+    from .results import read_latest_deepeval_run, save_run
 else:
     from dataset import dataset
     from model import eval_model
+    from slim_trace import install as install_slim_trace
+    from results import read_latest_deepeval_run, save_run
 
 
 SUCCESSFUL_TASK_DESCRIPTION = """
@@ -59,7 +68,7 @@ def build_metrics():
     ]
     single_turn_metrics = [
         ArgumentCorrectnessMetric(
-            threshold=None, 
+            threshold=0.8,
             model=eval_model,
             include_reason=True,
         ),
@@ -91,11 +100,16 @@ def build_metrics():
 def main():
     load_dotenv()
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent"))
-    from agent import agent
+    from agent import agent, final_answer
 
+    install_slim_trace()  # keep judge requests under Groq's free-tier limit
     trace_metrics, single_turn_metrics = build_metrics()
     cache_config = CacheConfig(use_cache=False, write_cache=False)
     display_config = DisplayConfig(inspect_after_run=False)
+    # Strictly one judge call at a time, and keep going if a call still fails,
+    # so a free-tier run prints scores for the metrics that finished.
+    async_config = AsyncConfig(run_async=False)
+    error_config = ErrorConfig(ignore_errors=True)
     test_cases = []
 
     # The callback captures the trace required by the four agentic metrics.
@@ -103,6 +117,8 @@ def main():
         metrics=trace_metrics,
         cache_config=cache_config,
         display_config=display_config,
+        async_config=async_config,
+        error_config=error_config,
     ):
         response = agent.invoke(
             {"messages": [{"role": "user", "content": golden.input}]},
@@ -127,20 +143,34 @@ def main():
         test_cases.append(
             LLMTestCase(
                 input=golden.input,
-                actual_output=response["structured_response"].answer,
+                actual_output=final_answer(response),
                 expected_output=golden.expected_output,
                 tools_called=tools_called,
                 expected_tools=golden.expected_tools,
             )
         )
+    rows = read_latest_deepeval_run("trace")
 
     evaluate(
         test_cases=test_cases,
         metrics=single_turn_metrics,
         cache_config=cache_config,
         display_config=display_config,
+        async_config=async_config,
+        error_config=error_config,
     )
+    rows += read_latest_deepeval_run("single_turn")
+
+    from models import AGENT_MODEL
+    from tools import STORE_TODAY
+    run_file = save_run(rows, {
+        "agent_model": AGENT_MODEL,
+        "judge_model": eval_model.get_model_name(),
+        "test_cases": len(test_cases),
+        "store_today": STORE_TODAY,
+    })
     print(f"\nCompleted all 7 metrics for {len(test_cases)} test cases.")
+    print(f"Saved results to {run_file} (and evaluations/results/latest.*)")
 
 
 if __name__ == "__main__":

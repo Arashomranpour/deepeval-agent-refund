@@ -10,6 +10,9 @@ sys.path.insert(
 from agent import agent
 from dataset import dataset
 from model import eval_model
+from slim_trace import install as install_slim_trace
+
+install_slim_trace()  # keep judge requests under Groq's free-tier limit
 
 from deepeval.metrics import StepEfficiencyMetric
 from deepeval.integrations.langchain import CallbackHandler

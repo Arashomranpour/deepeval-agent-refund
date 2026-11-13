@@ -7,7 +7,7 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[1] / "agent")
 )
 
-from agent import agent
+from agent import agent, final_answer
 from dataset import dataset
 from model import eval_model
 
@@ -26,7 +26,7 @@ for golden in dataset.goldens:
         "callbacks": [CallbackHandler()]}
     )
 
-    actual_output = response["structured_response"].answer
+    actual_output = final_answer(response)
 
     tools_called = []
     test_cases = []

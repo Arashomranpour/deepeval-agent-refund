@@ -1,0 +1,59 @@
+name: Run DeepEval evaluation
+
+# Manual only: a full run costs Groq tokens and takes minutes on the free tier.
+on:
+  workflow_dispatch:
+    inputs:
+      eval_limit:
+        description: "Number of goldens to evaluate (0 = all 7)"
+        default: "2"
+        required: true
+
+permissions:
+  contents: write # commits the saved results back to main
+
+jobs:
+  evaluate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"
+          enable-cache: true
+      - run: uv sync --locked
+
+      - name: Check the Groq key secret
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          if [ -z "$GROQ_API_KEY" ]; then
+            echo "::error::Add a GROQ_API_KEY repository secret first: gh secret set GROQ_API_KEY"
+            exit 1
+          fi
+
+      - name: Evaluate all 7 metrics
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          EVAL_LIMIT: ${{ inputs.eval_limit }}
+          PYTHONIOENCODING: utf-8
+        run: uv run python evaluations/eval_all.py
+
+      - name: Job summary
+        run: cat evaluations/results/latest.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: evaluations/results/
+
+      - name: Commit results (triggers a redeploy of the results page)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add evaluations/results
+          git diff --cached --quiet && exit 0
+          git commit -m "eval: results from run ${{ github.run_id }}"
+          git push
