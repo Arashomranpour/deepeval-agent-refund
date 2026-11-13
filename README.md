@@ -12,6 +12,8 @@
 ![Azure](https://img.shields.io/badge/Deploy-Azure%20Container%20Apps-0078D4)
 ![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)
 
+**🚀 Live demo: [deepeval-agent-refund.streamlit.app](https://deepeval-agent-refund-foprzjhki6yshzt8rrovqj.streamlit.app/)**: sign in with Clerk, bring your own free Groq key, and chat with the agent. The evaluation results page needs no sign-in.
+
 > **Credit:** this project builds on **[LangChain Agent Evaluation System](https://github.com/Mohamad-Hachem/LangChain_Agent_Evaluation_System) by [Mohamad Hachem](https://github.com/Mohamad-Hachem)**, who designed the refund agent, its tools and sample data, the evaluation dataset, the seven-metric DeepEval runner, and the `understanding_metrics/` examples. The original commits are kept in this repository's history. The extensions listed below are by [Arash Omranpour](https://github.com/Arashomranpour).
 
 ![Chat page: the agent checks the purchase and issues refund ticket RF-20261113-C8A890. Admin page: the same ticket, approved by the admin](screenshots/chat-and-admin.png)
