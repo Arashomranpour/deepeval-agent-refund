@@ -15,3 +15,7 @@ The public chat should know who is using it (to deter abuse and to look like a r
 - Real sign-in with social login and MFA, managed by Clerk, at no cost on its free plan.
 - One more redirect URI to register per deployment (`http://localhost:8501/oauth2callback`, `https://<app>.streamlit.app/oauth2callback`).
 - The Clerk instance is in **Development** mode, which shows a "Development mode" badge and has user limits; a production instance needs a custom domain.
+
+## Note: the `prompt` parameter
+
+`st.login()` sends `prompt="select_account"` unless `client_kwargs` sets a prompt. Clerk rejects that value (`invalid_request`), and Streamlit then silently returns the visitor to the sign-in screen. The secrets therefore set `prompt = "consent"`; `tests/test_app.py` checks the example keeps an accepted value.

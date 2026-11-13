@@ -109,3 +109,13 @@ def test_chat_is_open_without_clerk_config():
     at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30).run()
     assert not any("Sign in with Clerk" in b.label for b in at.button)
     assert len(at.text_input) == 1  # straight to the bring-your-own-key form
+
+
+def test_clerk_example_overrides_streamlit_default_prompt():
+    # Streamlit sends prompt="select_account" unless client_kwargs sets one, and Clerk
+    # rejects that value, which bounces every sign-in back to the login screen.
+    import tomllib
+
+    example = tomllib.loads((ROOT / ".streamlit" / "secrets.toml.example").read_text(encoding="utf-8"))
+    prompt = example["auth"]["clerk"]["client_kwargs"].get("prompt")
+    assert prompt in {"login", "consent", "none"}
