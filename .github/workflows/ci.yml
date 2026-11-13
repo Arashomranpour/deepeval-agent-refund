@@ -22,6 +22,11 @@ jobs:
         run: uv sync --locked
       - name: Lint (ruff)
         run: uv run ruff check . --output-format=github
+      - name: requirements.txt matches uv.lock (used by Streamlit Community Cloud)
+        run: |
+          uv export --no-dev --no-hashes --no-emit-project --format requirements-txt -q -o /tmp/req.txt
+          diff <(grep -v '^#' requirements.txt) <(grep -v '^#' /tmp/req.txt) \
+            || { echo "::error::requirements.txt is stale: run the uv export command at its top"; exit 1; }
       - name: Run tests with coverage (no API key, no network)
         run: |
           uv run pytest -q --cov --cov-report=term --cov-report=markdown:coverage.md

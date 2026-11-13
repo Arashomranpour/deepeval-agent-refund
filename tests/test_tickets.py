@@ -1,5 +1,6 @@
 """Refund tickets: storage backends, the issuing tool, admin sign-in and the admin page."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -54,8 +55,37 @@ def test_sqlite_store_persists(tmp_path):
 
 def test_backend_selection(monkeypatch, tmp_path):
     monkeypatch.delenv("TICKETS_BACKEND")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("TICKETS_DB", str(tmp_path / "x.db"))
     assert tickets.get_store().backend == "sqlite"
+
+
+def test_database_url_selects_postgres(monkeypatch):
+    seen = {}
+
+    class FakePostgres:
+        backend = "postgres"
+
+        def __init__(self, url):
+            seen["url"] = url
+
+    monkeypatch.delenv("TICKETS_BACKEND")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host/db")
+    monkeypatch.setattr(tickets, "PostgresTicketStore", FakePostgres)
+    assert tickets.get_store().backend == "postgres"
+    assert seen["url"] == "postgresql://u:p@host/db"
+
+
+@pytest.mark.skipif(not os.getenv("TEST_DATABASE_URL"), reason="set TEST_DATABASE_URL to test against Postgres")
+def test_postgres_store_lifecycle():
+    store = tickets.PostgresTicketStore(os.environ["TEST_DATABASE_URL"])
+    ticket = store.create("user123", 30, ["book", "pen"])
+    assert any(t["id"] == ticket["id"] and t["user"] == "user123" for t in store.list("open"))
+    updated = store.set_status(ticket["id"], "rejected", reviewer="admin", note="test")
+    assert updated["status"] == "rejected"
+    assert all(t["id"] != ticket["id"] for t in store.list("open"))
+    with pytest.raises(KeyError):
+        store.set_status("RF-missing", "approved", reviewer="admin")
 
 
 def test_tool_saves_a_ticket():

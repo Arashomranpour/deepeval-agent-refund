@@ -1,14 +1,16 @@
 """Refund ticket storage.
 
-One small interface, three backends, picked at runtime:
+One small interface, four backends, picked at runtime:
 
-- ``azure``:  Azure Table Storage, authenticated with the app's managed identity (no keys).
-              Used when ``AZURE_TABLES_ENDPOINT`` is set (Terraform sets it on the Container App).
-- ``sqlite``: a local file (``data/tickets.db``) for running on a laptop. The default.
-- ``memory``: a process-local dict, for tests and evaluation runs (keeps eval traffic out of
-              the real ticket list).
+- ``azure``:    Azure Table Storage, authenticated with the app's managed identity (no keys).
+                Used when ``AZURE_TABLES_ENDPOINT`` is set (Terraform sets it on the Container App).
+- ``postgres``: any Postgres, e.g. a free Neon database for the Streamlit Community Cloud
+                deployment. Used when ``DATABASE_URL`` is set.
+- ``sqlite``:   a local file (``data/tickets.db``) for running on a laptop. The default.
+- ``memory``:   a process-local dict, for tests and evaluation runs (keeps eval traffic out of
+                the real ticket list).
 
-Override the choice with ``TICKETS_BACKEND=azure|sqlite|memory``.
+Override the choice with ``TICKETS_BACKEND=azure|postgres|sqlite|memory``.
 """
 
 from __future__ import annotations
@@ -147,6 +149,61 @@ class SqliteTicketStore:
         return ticket
 
 
+class PostgresTicketStore:
+    """Postgres (Neon, Supabase, Azure Database for PostgreSQL...). One short connection per
+    call: fine for a demo's traffic, and safe with Neon's pooled connection string."""
+
+    backend = "postgres"
+    COLUMNS = SqliteTicketStore.COLUMNS
+
+    def __init__(self, url: str) -> None:
+        self._url = url
+        with self._connect() as db:
+            db.execute(
+                'CREATE TABLE IF NOT EXISTS refund_tickets (id TEXT PRIMARY KEY, "user" TEXT NOT NULL,'
+                " amount DOUBLE PRECISION NOT NULL, items TEXT, status TEXT NOT NULL, created_at TEXT,"
+                " updated_at TEXT, reviewed_by TEXT, note TEXT)"
+            )
+
+    def _connect(self):
+        import psycopg
+        from psycopg.rows import dict_row
+
+        return psycopg.connect(self._url, row_factory=dict_row, connect_timeout=10)
+
+    @property
+    def _cols(self) -> str:
+        return ", ".join(f'"{c}"' for c in self.COLUMNS)
+
+    def create(self, user, amount, items=None):
+        ticket = _new_ticket(user, amount, items)
+        with self._connect() as db:
+            db.execute(
+                f"INSERT INTO refund_tickets ({self._cols}) VALUES ({', '.join(['%s'] * len(self.COLUMNS))})",
+                [ticket[c] for c in self.COLUMNS],
+            )
+        return ticket
+
+    def list(self, status=None):
+        with self._connect() as db:
+            rows = db.execute(f"SELECT {self._cols} FROM refund_tickets").fetchall()
+        return _sorted([dict(r) for r in rows], status)
+
+    def set_status(self, ticket_id, status, reviewer, note=""):
+        with self._connect() as db:
+            row = db.execute(
+                f"SELECT {self._cols} FROM refund_tickets WHERE id = %s FOR UPDATE", (ticket_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(ticket_id)
+            ticket = _review(dict(row), status, reviewer, note)
+            db.execute(
+                "UPDATE refund_tickets SET status = %s, reviewed_by = %s, note = %s, updated_at = %s WHERE id = %s",
+                (ticket["status"], ticket["reviewed_by"], ticket["note"], ticket["updated_at"], ticket_id),
+            )
+        return ticket
+
+
 class AzureTableTicketStore:
     """Azure Table Storage via Entra ID: the Container App's user-assigned identity
     (``AZURE_CLIENT_ID``) or your ``az login`` locally. No account keys anywhere."""
@@ -216,9 +273,14 @@ def get_store() -> TicketStore:
     with _store_lock:
         if _store is None:
             endpoint = os.getenv("AZURE_TABLES_ENDPOINT", "")
-            backend = os.getenv("TICKETS_BACKEND") or ("azure" if endpoint else "sqlite")
+            database_url = os.getenv("DATABASE_URL", "")
+            backend = os.getenv("TICKETS_BACKEND") or (
+                "azure" if endpoint else "postgres" if database_url else "sqlite"
+            )
             if backend == "azure":
                 _store = AzureTableTicketStore(endpoint, os.getenv("TICKETS_TABLE", "refundtickets"))
+            elif backend == "postgres":
+                _store = PostgresTicketStore(database_url)
             elif backend == "memory":
                 _store = MemoryTicketStore()
             else:

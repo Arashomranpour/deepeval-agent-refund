@@ -82,3 +82,30 @@ def test_message_limit_disables_chat():
     assert not at.exception
     assert at.chat_input[0].disabled
     assert any("used its 20 messages" in i.value for i in at.info)
+
+
+CLERK_SECRETS = {
+    "redirect_uri": "http://localhost:8501/oauth2callback",
+    "cookie_secret": "test-cookie-secret",
+    "clerk": {
+        "client_id": "test-client",
+        "client_secret": "test-secret",
+        "server_metadata_url": "https://example.clerk.accounts.dev/.well-known/openid-configuration",
+    },
+}
+
+
+def test_clerk_sign_in_gates_chat():
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30)
+    at.secrets["auth"] = CLERK_SECRETS
+    at.run()
+    assert not at.exception
+    assert any("Sign in with Clerk" in b.label for b in at.button)
+    assert len(at.text_input) == 0  # no Groq key field before signing in
+    assert len(at.chat_input) == 0
+
+
+def test_chat_is_open_without_clerk_config():
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30).run()
+    assert not any("Sign in with Clerk" in b.label for b in at.button)
+    assert len(at.text_input) == 1  # straight to the bring-your-own-key form

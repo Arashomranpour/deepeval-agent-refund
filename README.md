@@ -56,6 +56,7 @@ This repository is a hands-on learning lab for answering those questions. It pai
 - [Explore and extend](#explore-and-extend)
 - [Project map](#project-map)
 - [Limitations and troubleshooting](#limitations-and-troubleshooting)
+- [Deploy to Streamlit Community Cloud](#deploy-to-streamlit-community-cloud)
 - [Deploy to Azure](#deploy-to-azure)
 - [Acknowledgements](#acknowledgements)
 
@@ -275,7 +276,9 @@ The app has three pages:
 - **Evaluation results**: reads the runs saved in `evaluations/results/` and shows the average score per metric against its threshold, a pass/fail grid of every test case and metric, the judge's reason for each score, scores over time once there are several runs, and Markdown/JSON downloads. It never calls a model and needs no key.
 - **Admin: refund tickets**: sign in with the admin username and password to see every ticket the agent issued, filter and search them, and approve or reject open ones with a note. Locally, set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`. On Azure, Terraform generates the password into Key Vault; get it with `terraform output admin_sign_in`.
 
-The chat page is **bring-your-own-key**: visitors paste their own Groq key ([console.groq.com/keys](https://console.groq.com/keys)). It is checked by listing models (no tokens spent), kept only in that browser session, and never saved. `GROQ_API_KEY` in `.env` is used only by the command-line scripts, so a deployed app never runs on your key. To deploy on Streamlit Community Cloud, point it at `app.py`; no secrets are needed.
+The chat page is **bring-your-own-key**: visitors paste their own Groq key ([console.groq.com/keys](https://console.groq.com/keys)). It is checked by listing models (no tokens spent), kept only in that browser session, and never saved. `GROQ_API_KEY` in `.env` is used only by the command-line scripts, so a deployed app never runs on your key.
+
+When Clerk is configured, visitors first **sign in with Clerk** (email, Google or GitHub) before the key step. Streamlit's built-in `st.login()` uses Clerk as an OpenID Connect provider ([ADR 0012](docs/adr/0012-clerk-sign-in-for-chat.md)). Without the `[auth]` secrets the chat stays open.
 
 Offline tests, lint and hooks (no key, no network):
 
@@ -342,6 +345,19 @@ This is an educational prototype with a small, single-turn evaluation dataset. T
 | Different scores on a rerun | Compare model settings, dates, traces, and judge reasons before drawing conclusions |
 
 Start with the documented Python script commands. The package entry point declared in `pyproject.toml` points to a `main` function that is not currently implemented.
+
+## Deploy to Streamlit Community Cloud
+
+The public demo runs on Streamlit Community Cloud ([ADR 0011](docs/adr/0011-public-demo-on-streamlit-cloud-with-neon.md)). It installs from [`requirements.txt`](requirements.txt), exported from `uv.lock` (CI checks they match), and redeploys on every push to `main`.
+
+1. At [share.streamlit.io](https://share.streamlit.io), **Create app** from this repository: branch `main`, main file `app.py`, Python 3.12.
+2. In **Advanced settings → Secrets**, paste a filled-in copy of [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example):
+   - `ADMIN_USERNAME` / `ADMIN_PASSWORD` for the admin page;
+   - `DATABASE_URL`: a free [Neon](https://neon.tech) Postgres connection string, so tickets survive restarts (optional: without it tickets use SQLite until the next restart);
+   - `[auth]` and `[auth.clerk]` for Clerk sign-in (optional).
+3. For Clerk, add `https://<your-app>.streamlit.app/oauth2callback` to the OAuth application's redirect URIs and use it as `redirect_uri`.
+
+No Groq key is stored anywhere: visitors bring their own.
 
 ## Deploy to Azure
 

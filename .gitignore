@@ -27,3 +27,6 @@ htmlcov/
 
 # Local ticket database (SQLite fallback when Azure Table Storage is not configured)
 data/*.db
+
+# Streamlit secrets (Community Cloud settings live in its dashboard)
+.streamlit/secrets.toml

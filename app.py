@@ -3,6 +3,7 @@
 Run with:  uv run streamlit run app.py
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -16,6 +17,17 @@ for folder in ("agent", "evaluations", "app_pages"):
         sys.path.insert(0, path)
 
 st.set_page_config(page_title="Refund Agent Evaluation", page_icon="🧾", layout="wide")
+
+# Streamlit Community Cloud provides settings as secrets; the app reads them from the
+# environment (like on Azure and with a local .env). The Groq key is NOT one of them:
+# visitors always bring their own.
+SECRET_SETTINGS = ("ADMIN_USERNAME", "ADMIN_PASSWORD", "DATABASE_URL", "AGENT_TODAY")
+try:
+    for name in SECRET_SETTINGS:
+        if name in st.secrets and not os.environ.get(name):
+            os.environ[name] = str(st.secrets[name])
+except Exception:  # no secrets.toml: running locally with .env, on Azure, or in tests
+    pass
 
 from glass import apply_glass_theme  # noqa: E402
 

@@ -5,6 +5,7 @@ import time
 from uuid import uuid4
 
 import streamlit as st
+from chat_auth import clerk_configured, display_name, sign_in_button, sign_out_button, signed_in
 from groq import AuthenticationError, RateLimitError
 
 from agent import build_agent, stream_reply
@@ -54,10 +55,36 @@ HERO = ("LangChain agent · Groq", "Refund support agent",
         "before issuing a refund. Watch each tool call live as it works.",
         [f"🧠 {AGENT_MODEL}", f"📅 store date {STORE_TODAY}", "🔧 4 tools", "🔑 bring your own key"])
 
-# --- Gate: nothing below runs until the visitor connects their own key. -------
+USE_CLERK = clerk_configured()
+if USE_CLERK:
+    HERO[3].append("🔐 Clerk sign-in")
+
+# --- Gate 1: sign in with Clerk (when configured). -----------------------------
+if USE_CLERK and not signed_in():
+    forget_key()  # a signed-out visitor never keeps an agent built from an earlier key
+    hero(*HERO)
+    _, middle, _ = st.columns([1, 2, 1])
+    with middle:
+        st.subheader("Sign in to chat with the agent")
+        st.markdown("Sign in with your email, Google or GitHub account through Clerk. "
+                    "The **Evaluation results** page is open to everyone.")
+        sign_in_button()
+    with st.sidebar:
+        st.link_button("⭐ Source on GitHub", REPO_URL, use_container_width=True)
+    st.stop()
+
+
+def account_box() -> None:
+    if USE_CLERK:
+        st.caption(f"Signed in as **{display_name()}**")
+        sign_out_button()
+
+
+# --- Gate 2: nothing below runs until the visitor connects their own key. -----
 if "agent" not in st.session_state:
     hero(*HERO)
     with st.sidebar:
+        account_box()
         st.subheader("🔑 Connect your Groq API key")
         st.markdown(
             "Get a free key at [console.groq.com/keys](https://console.groq.com/keys). "
@@ -82,6 +109,7 @@ sent = st.session_state.setdefault("sent", 0)
 
 # --- Sidebar -------------------------------------------------------------------
 with st.sidebar:
+    account_box()
     st.caption(f"Model: `{AGENT_MODEL}` on Groq")
     st.caption(f"Store date: **{STORE_TODAY}** (refunds allowed within 30 days)")
     st.progress(min(sent / MAX_MESSAGES, 1.0), text=f"{sent} / {MAX_MESSAGES} messages this session")

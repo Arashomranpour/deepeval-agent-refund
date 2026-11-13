@@ -10,7 +10,8 @@ from glass import hero
 from tickets import STATUSES, get_store
 
 log = logging.getLogger(__name__)
-BACKEND_LABEL = {"azure": "Azure Table Storage", "sqlite": "Local SQLite file", "memory": "In-memory (tests)"}
+BACKEND_LABEL = {"azure": "Azure Table Storage", "postgres": "Postgres (Neon)",
+                 "sqlite": "Local SQLite file", "memory": "In-memory (tests)"}
 STATUS_ICON = {"open": "🟡 open", "approved": "✅ approved", "rejected": "❌ rejected"}
 
 hero("Back office", "Refund tickets",
